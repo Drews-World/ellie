@@ -1,5 +1,5 @@
 # ELLIE — Executive Life Logic Intelligence Engine
-> Personal command center for AJH. Two modes: the world, and your life.
+> Personal command center for Drew. Two modes: the world, and your life.
 
 ## Stack
 - **Frontend**: React + Vite + React Router
