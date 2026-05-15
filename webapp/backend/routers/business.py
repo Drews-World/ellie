@@ -134,6 +134,24 @@ async def ellie_pipeline():
         return {"running": False, "step": "idle", "detail": "", "pct": 0, "error": str(e)}
 
 
+# ── Strategy ─────────────────────────────────────────────────────────────────
+
+@router.get("/strategy/report")
+async def strategy_report():
+    try:
+        return await _get("/strategy/report")
+    except Exception as e:
+        return {"error": str(e), "summary": "Report unavailable.", "top_niches": [], "catalog_gaps": [], "proposed_runs": []}
+
+
+@router.get("/strategy/latest")
+async def strategy_latest():
+    try:
+        return await _get("/strategy/latest")
+    except Exception as e:
+        return {"summary": "No report available.", "top_niches": [], "catalog_gaps": [], "proposed_runs": []}
+
+
 # ── Nova ──────────────────────────────────────────────────────────────────────
 
 @router.post("/nova/run")

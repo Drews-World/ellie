@@ -71,6 +71,103 @@ function Empty({ children }) {
 }
 
 // ── ELLIE supervisor room ─────────────────────────────────────────────────────
+function StrategyReport({ report, onRunProposal, onDismiss }) {
+  const scoreColor = s => s >= 0.8 ? 'var(--mint-500)' : s >= 0.6 ? 'var(--gold-500, #f59e0b)' : 'var(--ink-400)'
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--mint-500)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          Strategy Report
+        </div>
+        <Btn onClick={onDismiss} color="var(--ink-400)" small>✕</Btn>
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--ink-700)', lineHeight: 1.5 }}>{report.summary}</div>
+
+      {report.top_niches?.length > 0 && (
+        <div>
+          <Label>Top Niches</Label>
+          {report.top_niches.map((n, i) => (
+            <div key={i} style={{ background: 'var(--paper-100)', borderRadius: 'var(--radius-sm)',
+              padding: '8px 10px', marginBottom: 5, borderLeft: `3px solid ${scoreColor(n.opportunity_score)}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-800)' }}>{n.niche}</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: scoreColor(n.opportunity_score) }}>
+                  {Math.round((n.opportunity_score || 0) * 100)}%
+                </span>
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--ink-500)', marginBottom: 5, lineHeight: 1.4 }}>{n.reasoning}</div>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {n.best_products?.map(p => (
+                  <span key={p} style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 99,
+                    background: 'rgba(122,110,142,0.12)', color: 'var(--violet-500)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    {p}
+                  </span>
+                ))}
+                {n.recommended_action && (
+                  <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 99, marginLeft: 'auto',
+                    background: n.recommended_action === 'run Forge' ? 'rgba(94,234,212,0.15)' : 'rgba(0,0,0,0.05)',
+                    color: n.recommended_action === 'run Forge' ? 'var(--mint-500)' : 'var(--ink-400)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    {n.recommended_action}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {report.catalog_gaps?.length > 0 && (
+        <div>
+          <Label>Catalog Gaps</Label>
+          {report.catalog_gaps.map((g, i) => (
+            <div key={i} style={{ background: 'rgba(251,191,36,0.07)', border: '1px solid rgba(251,191,36,0.3)',
+              borderRadius: 'var(--radius-sm)', padding: '7px 10px', marginBottom: 5 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-700)', marginBottom: 2 }}>
+                ⚠ {g.product_type}
+                <span style={{ marginLeft: 8, fontSize: 9, padding: '1px 6px', borderRadius: 99,
+                  background: g.estimated_opportunity === 'high' ? 'rgba(251,191,36,0.2)' : 'rgba(0,0,0,0.06)',
+                  color: g.estimated_opportunity === 'high' ? '#b45309' : 'var(--ink-400)', fontWeight: 700, textTransform: 'uppercase' }}>
+                  {g.estimated_opportunity}
+                </span>
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--ink-500)', lineHeight: 1.4 }}>{g.why_it_matters}</div>
+              {g.blueprint_note && (
+                <div style={{ fontSize: 9, color: 'var(--ink-400)', marginTop: 3, fontStyle: 'italic' }}>{g.blueprint_note}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {report.proposed_runs?.length > 0 && (
+        <div>
+          <Label>Proposed Forge Runs</Label>
+          {report.proposed_runs.map((r, i) => (
+            <div key={i} style={{ background: 'rgba(122,110,142,0.06)', border: '1px solid var(--paper-300)',
+              borderRadius: 'var(--radius-sm)', padding: '8px 10px', marginBottom: 5 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-800)', marginBottom: 2 }}>{r.niche}</div>
+                  <div style={{ fontSize: 10, color: 'var(--ink-500)', marginBottom: 4 }}>{r.rationale}</div>
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {r.products?.map(p => (
+                      <span key={p} style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 99,
+                        background: 'rgba(122,110,142,0.12)', color: 'var(--violet-500)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        {p}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <Btn onClick={() => onRunProposal(r)} color="var(--violet-500)" small>Run</Btn>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function EllieRoom({ status, activity, onRefresh }) {
   const agentStatus = status?.agents?.find(a => a.name === 'ELLIE')?.status ?? 'idle'
   const spend = status?.metrics?.find(m => m.label === 'Spend today')?.value ?? '—'
@@ -78,6 +175,7 @@ function EllieRoom({ status, activity, onRefresh }) {
   const [cmd, setCmd] = useState('')
   const [thinking, setThinking] = useState(false)
   const [plan, setPlan] = useState(null)
+  const [strategyReport, setStrategyReport] = useState(null)
   const [confirming, setConfirming] = useState(false)
   const [pipeline, setPipeline] = useState(null)
   const pollRef = useRef(null)
@@ -105,25 +203,51 @@ function EllieRoom({ status, activity, onRefresh }) {
     if (!cmd.trim()) return
     setThinking(true)
     setPlan(null)
+    setStrategyReport(null)
     try {
       const res = await api.post('/business/ellie/command', { message: cmd })
-      setPlan(res.data.plan)
+      const data = res.data
+      if (data.command_type === 'strategy') {
+        setStrategyReport(data.report)
+      } else {
+        setPlan(data.plan)
+      }
     } catch (e) {
       setPlan({ error: 'Failed to reach ELLIE' })
     }
     setThinking(false)
   }
 
-  const confirmPlan = async () => {
+  const confirmPlan = async (planToRun) => {
+    const p = planToRun || plan
     setConfirming(true)
     try {
-      await api.post('/business/ellie/confirm', { plan })
+      await api.post('/business/ellie/confirm', { plan: p })
       setPipeline({ running: true, step: 'starting', detail: 'ELLIE is spinning up the pipeline…', pct: 0 })
       startPipelinePoll()
       setPlan(null)
+      setStrategyReport(null)
       setCmd('')
     } catch { }
     setConfirming(false)
+  }
+
+  const runProposal = (proposal) => {
+    // Convert a proposed_run from the strategy report into a pipeline plan
+    const syntheticPlan = {
+      command_type: 'design',
+      understood_intent: `Run Forge for: ${proposal.niche}`,
+      interpretation: proposal.rationale,
+      niches: [{
+        name: proposal.niche,
+        description: proposal.niche,
+        suggested_products: proposal.products,
+        n_concepts: proposal.n_concepts || 3,
+        style_notes: '',
+      }],
+      market_reasoning: proposal.rationale,
+    }
+    confirmPlan(syntheticPlan)
   }
 
   const pipelineActive = pipeline && (pipeline.running || pipeline.step === 'done' || pipeline.step === 'error')
@@ -154,6 +278,15 @@ function EllieRoom({ status, activity, onRefresh }) {
             </div>
             <div style={{ fontSize: 11, color: 'var(--ink-500)', lineHeight: 1.4 }}>{pipeline.detail}</div>
           </div>
+        )}
+
+        {/* Strategy report */}
+        {strategyReport && (
+          <StrategyReport
+            report={strategyReport}
+            onRunProposal={runProposal}
+            onDismiss={() => setStrategyReport(null)}
+          />
         )}
 
         {/* Plan confirmation card */}
@@ -189,7 +322,7 @@ function EllieRoom({ status, activity, onRefresh }) {
               </div>
             )}
             <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-              <Btn onClick={confirmPlan} disabled={confirming} color="var(--violet-500)">
+              <Btn onClick={() => confirmPlan()} disabled={confirming} color="var(--violet-500)">
                 {confirming ? '⏳ Starting…' : '✓ Run it'}
               </Btn>
               <Btn onClick={() => setPlan(null)} color="var(--ink-400)">✕ Cancel</Btn>
@@ -207,7 +340,7 @@ function EllieRoom({ status, activity, onRefresh }) {
             value={cmd}
             onChange={e => setCmd(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendCommand() } }}
-            placeholder="e.g. lets focus on cats and Jesus…"
+            placeholder="e.g. lets focus on cats and Jesus… or: what should we make next?"
             rows={2}
             disabled={thinking || pipeline?.running}
             style={{ width: '100%', resize: 'none', padding: '8px 10px',

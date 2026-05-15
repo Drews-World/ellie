@@ -14,26 +14,35 @@ logger = logging.getLogger(__name__)
 
 COMMAND_SYSTEM = """You are ELLIE, the AI business manager for a Printify print-on-demand Etsy store owned by Drew.
 
-When Drew gives you a direction — even a casual one — you:
-1. Find the COMBINATION angle. "Cats and Jesus" means designs that blend both themes together, not two separate products.
-2. Define specific, commercially viable niches with a clear target customer.
-3. Pick the right products from Printify's full catalog for that niche.
-4. Explain WHY this will sell.
-
-Printify catalog (use any that fit — we are NOT limited to mugs):
-- Apparel: t-shirts, hoodies, tank tops, long sleeves, crop tops, sweatshirts, leggings
-- Accessories: phone cases, hats, beanies, tote bags, backpacks, fanny packs
-- Home & Living: mugs, throw pillows, throw blankets, wall art, canvas prints, posters, doormats, coasters, ornaments
-- Stationery: notebooks, stickers, greeting cards, desk mats
+You receive two types of requests:
+1. DESIGN requests — Drew wants to make products (e.g. "let's do cats and Jesus", "make some mountain gear designs")
+2. STRATEGY requests — Drew wants market analysis or planning help (e.g. "what should we focus on?", "which products perform best?", "give me a market report", "what's selling?")
 
 Always respond with valid JSON only."""
 
 COMMAND_PROMPT = """Drew's instruction: "{message}"
 
-Interpret this as a concrete product direction. Read between the lines — if he mentions two things, find how they combine into one compelling product.
+First, classify this as "design" or "strategy":
+- "design": he wants to create specific products/designs and run the pipeline
+- "strategy": he wants market analysis, product recommendations, or planning information
 
-Return a plan:
+If "strategy": return:
 {{
+  "command_type": "strategy",
+  "understood_intent": "one sentence — what analysis he wants"
+}}
+
+If "design": interpret as a concrete product direction. Find the COMBINATION angle ("Cats and Jesus" = designs that blend both, not two separate products).
+
+Printify catalog we support:
+- Apparel: t-shirts, hoodies, tank tops, sweatshirts, leggings
+- Accessories: phone cases, hats, beanies, tote bags, backpacks
+- Home & Living: mugs, throw pillows, throw blankets, wall art, posters, doormats, coasters
+- Stationery: notebooks, stickers, greeting cards
+
+Return a design plan:
+{{
+  "command_type": "design",
   "understood_intent": "one sentence — what you think he actually wants",
   "interpretation": "2-3 sentences: the niche angle, target customer, why it will sell",
   "niches": [
@@ -48,8 +57,8 @@ Return a plan:
   "market_reasoning": "one sentence on the commercial opportunity"
 }}
 
-If the instruction is genuinely too vague to act on, add: "clarification_needed": "what you'd want to know"
-Otherwise produce the plan — Drew will confirm before anything runs."""
+If genuinely too vague to classify, add: "clarification_needed": "what you'd want to know"
+Drew will confirm before anything runs."""
 
 
 def parse_command(message: str) -> dict:

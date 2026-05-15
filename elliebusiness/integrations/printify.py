@@ -58,10 +58,11 @@ PRODUCT_CATALOG: dict[str, dict] = {
         ],
         "print_area": "front",
         "price_cents": 4499,
-        # Same chest print area as t-shirt; slightly smaller to account for kangaroo pocket area.
-        "image_scale": 0.70,
+        # Print area ~12"x10". Scale=0.60 at y=0.45 keeps the design fully on-canvas:
+        # top edge at 0.45 - (0.60*12/10)/2 = 0.45 - 0.36 = 0.09 from top — safe.
+        "image_scale": 0.60,
         "image_x": 0.5,
-        "image_y": 0.40,
+        "image_y": 0.45,
     },
     "mug": {
         "blueprint_id": 68,
@@ -116,8 +117,9 @@ PRODUCT_CATALOG: dict[str, dict] = {
         "variant_ids": [41521, 41524, 41527, 41530, 244992, 244993],
         "print_area": "front",
         "price_cents": 2999,
-        # 14"×14" square sublimation pillow. Full bleed looks great.
-        "image_scale": 1.0,
+        # 14"×14" square sublimation pillow. Leave a margin — full bleed looks
+        # amateurish on pillows; 0.80 gives a natural "print on pillow" look.
+        "image_scale": 0.80,
         "image_x": 0.5,
         "image_y": 0.5,
     },

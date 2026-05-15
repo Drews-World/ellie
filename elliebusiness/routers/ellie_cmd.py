@@ -40,9 +40,22 @@ class ConfirmBody(BaseModel):
 
 @router.post("/command")
 def interpret_command(body: CommandBody) -> dict:
-    """Parse a natural language instruction into a confirmation plan."""
+    """Parse a natural language instruction.
+    Returns {command_type: 'design', plan: {...}} or {command_type: 'strategy', report: {...}}.
+    """
     plan = parse_command(body.message)
-    return {"plan": plan}
+    command_type = plan.get("command_type", "design")
+
+    if command_type == "strategy":
+        # Run the Strategist inline (fast enough for a request — LLM call but no images)
+        try:
+            from agents.strategist.analyst import run_analysis
+            report = run_analysis()
+        except Exception as e:
+            report = {"error": str(e), "summary": "Analysis failed.", "top_niches": [], "catalog_gaps": [], "proposed_runs": []}
+        return {"command_type": "strategy", "understood_intent": plan.get("understood_intent", ""), "report": report}
+
+    return {"command_type": "design", "plan": plan}
 
 
 @router.post("/confirm")
