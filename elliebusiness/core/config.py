@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     openrouter_model: str = "anthropic/claude-sonnet-4-5"   # Forge creative tasks
-    openrouter_fast_model: str = "google/gemini-flash-1.5"  # Nova classification / cheap tasks
+    openrouter_fast_model: str = "openai/gpt-4o-mini"        # Nova classification / cheap tasks
 
     gemini_api_key: str = ""
     gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai"
@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     # ── Printify ─────────────────────────────────────────────────────────────
     printify_api_token: str = ""
     printify_shop_id: str = ""
+
+    # ── Discord ──────────────────────────────────────────────────────────────
+    discord_webhook_url: str = ""    # EllieBusiness channel webhook
+
+    # ── PixelLab (Phase 2 — game assets) ─────────────────────────────────────
+    pixellab_api_key: str = ""
 
     # ── App ──────────────────────────────────────────────────────────────────
     auth_token: str = "dev-token"    # Bearer token ELLIE Hub uses

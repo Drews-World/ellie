@@ -12,12 +12,26 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 
+import httpx
+
 from agents.archives.memory import count_pending
 from agents.treasury.ledger import is_over_limit, today_spend, today_spend_by_agent
 from agents.nova.researcher import run_all_niches
 from core.supabase_client import get_db
+from core.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+def _discord(message: str) -> None:
+    """Fire-and-forget Discord notification. Never raises."""
+    url = get_settings().discord_webhook_url
+    if not url:
+        return
+    try:
+        httpx.post(url, json={"content": message}, timeout=5)
+    except Exception:
+        pass
 
 # How long an agent can be idle before ELLIE warns
 IDLE_THRESHOLDS = {
@@ -56,14 +70,14 @@ def resume_all() -> None:
 
 
 def _notify(message: str) -> None:
-    """Queue a notification for Hub to surface to Drew."""
+    """Queue a notification for Hub and fire Discord alert."""
     _supervisor_state["notifications"].append({
         "ts": datetime.now(timezone.utc).isoformat(),
         "message": message,
     })
-    # Keep only last 20
     _supervisor_state["notifications"] = _supervisor_state["notifications"][-20:]
     logger.info(f"ELLIE notification: {message}")
+    _discord(f"**ELLIE** · {message}")
 
 
 def hourly_check() -> None:
