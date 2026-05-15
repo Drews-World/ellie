@@ -72,7 +72,7 @@ def get_approved_designs(niche: str | None = None, limit: int = 10) -> list[dict
     """Approved designs — used by Forge to understand Drew's taste."""
     try:
         db = get_db()
-        q = db.table("designs").select("*").eq("drew_verdict", "approve").order("created_at", desc=True)
+        q = db.table("designs").select("*").eq("status", "approved").order("created_at", desc=True)
         if niche:
             q = q.eq("niche", niche)
         return q.limit(limit).execute().data or []

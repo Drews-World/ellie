@@ -34,12 +34,15 @@ RESEARCH_PROMPT = """Analyze these top Etsy listings for the niche: "{niche}"
 Listings:
 {listings_json}
 
+Available product types we can produce: t-shirt, hoodie, mug, mug_15oz, tote bag, poster, pillow
+
 Extract:
 1. Top 3 trending design concepts (specific, actionable)
 2. Common price range (what sells)
 3. Tag patterns (which tags appear most)
 4. Design style themes (minimalist, bold, retro, etc.)
 5. One-line recommendation for our designer
+6. Which of our available product types make the most sense for this niche (pick 2-4)
 
 Respond with JSON:
 {{
@@ -47,7 +50,8 @@ Respond with JSON:
   "price_range": {{"low": 12.0, "high": 28.0, "sweet_spot": 18.0}},
   "top_tags": ["tag1", "tag2", "tag3", "tag4", "tag5"],
   "style_themes": ["minimalist", "bold"],
-  "recommendation": "one sentence for the designer"
+  "recommendation": "one sentence for the designer",
+  "recommended_products": ["mug", "t-shirt"]
 }}"""
 
 
@@ -84,17 +88,25 @@ def run_research(niche: str) -> dict | None:
 
     try:
         raw = complete(prompt, system=RESEARCH_SYSTEM, fast=True, json_mode=True)
+        raw = raw.strip()
+        import re as _re
+        fenced = _re.search(r"```(?:json)?\s*([\s\S]*?)```", raw)
+        if fenced:
+            raw = fenced.group(1).strip()
         analysis = json.loads(raw)
     except Exception as e:
         logger.error(f"Nova: LLM failed for '{niche}': {e}")
         return None
 
+    price_range = analysis.get("price_range", {})
+    # recommended_products lives inside raw_data (no dedicated column in trends table)
     trend = {
         "niche": niche,
-        "source": "etsy-top-listings",
-        "concept": analysis.get("recommendation", ""),
-        "evidence": analysis,
-        "observed_at": datetime.now(timezone.utc).isoformat(),
+        "signal_count": len(signals),
+        "avg_price_usd": price_range.get("sweet_spot") or price_range.get("low", 0),
+        "top_tags": analysis.get("top_tags", []),
+        "opportunity": analysis.get("recommendation", ""),
+        "raw_data": analysis,  # includes recommended_products key
     }
 
     # Persist to Supabase if available
@@ -102,7 +114,7 @@ def run_research(niche: str) -> dict | None:
         db = get_db()
         db.table("trends").insert(trend).execute()
     except Exception as e:
-        logger.warning(f"Nova: DB write failed (Supabase not configured?): {e}")
+        logger.warning(f"Nova: DB write failed: {e}")
 
     return trend
 

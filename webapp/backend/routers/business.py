@@ -106,6 +106,34 @@ async def business_capabilities():
         return {"actions": [], "metrics": [], "error": str(e)}
 
 
+# ── ELLIE command ─────────────────────────────────────────────────────────────
+
+@router.post("/ellie/command")
+async def ellie_command(request: Request):
+    try:
+        body = await request.json()
+        return await _post("/ellie/command", body)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.post("/ellie/confirm")
+async def ellie_confirm(request: Request):
+    try:
+        body = await request.json()
+        return await _post("/ellie/confirm", body)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.get("/ellie/pipeline")
+async def ellie_pipeline():
+    try:
+        return await _get("/ellie/pipeline")
+    except Exception as e:
+        return {"running": False, "step": "idle", "detail": "", "pct": 0, "error": str(e)}
+
+
 # ── Nova ──────────────────────────────────────────────────────────────────────
 
 @router.post("/nova/run")

@@ -10,26 +10,30 @@ Always respond with valid JSON."""
 
 CONCEPT_PROMPT = """Create {n} distinct design concepts for: "{niche}"
 
+Target products for this run: {products}
+
 Style memory from Drew's past approvals:
 {style_memory}
 
 Nova's current trend report for this niche:
 {trend_report}
 
-For each concept provide:
-- A short concept name (3-5 words)
-- A detailed image generation prompt (describe exactly what to generate: subject, style, colors, typography, composition)
-- Why this will sell (one sentence)
-- Product fit: which products this works on (mug, tshirt, poster)
+For each concept:
+- Pick a short concept name (3-5 words)
+- Write a detailed image generation prompt (subject, style, colors, typography, composition — be specific)
+- Write a short catchphrase or tagline that could appear on the product (optional but preferred)
+- Explain why this will sell in one sentence
+- List which of the target products this design suits best
 
 Respond with JSON:
 {{
   "concepts": [
     {{
-      "name": "Misty Summit Minimal",
-      "image_prompt": "Minimalist mountain range silhouette in muted earth tones, single peak centered, thin sans-serif text 'The Summit Awaits' below, lots of white space, clean vector style, suitable for mug print",
-      "sell_reason": "Mountain + mantra combos consistently top-sellers in outdoor niche",
-      "products": ["mug", "poster"]
+      "name": "Blessed Little Meow",
+      "image_prompt": "Cute cartoon cat wearing a tiny golden halo, sitting with paws folded together as if praying, warm pastel illustration, soft linework, 'God's Favorite Creature' in hand-lettered serif below, white background, works on both light apparel and mugs",
+      "tagline": "God's Favorite Creature",
+      "sell_reason": "Cat lovers + Christian gift market crossover — specific, underserved, high purchase intent",
+      "products": ["t-shirt", "mug", "tote bag"]
     }}
   ]
 }}"""

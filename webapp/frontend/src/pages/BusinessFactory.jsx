@@ -71,43 +71,153 @@ function Empty({ children }) {
 }
 
 // ── ELLIE supervisor room ─────────────────────────────────────────────────────
-function EllieRoom({ status, activity }) {
-  const agentStatus = status?.agents?.find(a => a.name === 'ELLIE')?.status ?? 'offline'
-  const notifications = activity?.items?.slice(-5).reverse() ?? []
+function EllieRoom({ status, activity, onRefresh }) {
+  const agentStatus = status?.agents?.find(a => a.name === 'ELLIE')?.status ?? 'idle'
   const spend = status?.metrics?.find(m => m.label === 'Spend today')?.value ?? '—'
 
+  const [cmd, setCmd] = useState('')
+  const [thinking, setThinking] = useState(false)
+  const [plan, setPlan] = useState(null)
+  const [confirming, setConfirming] = useState(false)
+  const [pipeline, setPipeline] = useState(null)
+  const pollRef = useRef(null)
+
+  const stopPoll = () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null } }
+
+  const startPipelinePoll = () => {
+    stopPoll()
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await api.get('/business/ellie/pipeline')
+        const p = res.data
+        setPipeline(p)
+        if (!p.running) {
+          stopPoll()
+          if (p.step === 'done') onRefresh()
+        }
+      } catch { stopPoll() }
+    }, 2000)
+  }
+
+  useEffect(() => () => stopPoll(), [])
+
+  const sendCommand = async () => {
+    if (!cmd.trim()) return
+    setThinking(true)
+    setPlan(null)
+    try {
+      const res = await api.post('/business/ellie/command', { message: cmd })
+      setPlan(res.data.plan)
+    } catch (e) {
+      setPlan({ error: 'Failed to reach ELLIE' })
+    }
+    setThinking(false)
+  }
+
+  const confirmPlan = async () => {
+    setConfirming(true)
+    try {
+      await api.post('/business/ellie/confirm', { plan })
+      setPipeline({ running: true, step: 'starting', detail: 'ELLIE is spinning up the pipeline…', pct: 0 })
+      startPipelinePoll()
+      setPlan(null)
+      setCmd('')
+    } catch { }
+    setConfirming(false)
+  }
+
+  const pipelineActive = pipeline && (pipeline.running || pipeline.step === 'done' || pipeline.step === 'error')
+
   return (
-    <Room icon="🧠" name="ELLIE" accent="var(--violet-500)" status={agentStatus}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {/* Big status */}
-        <div style={{ textAlign: 'center', padding: '12px 0 8px' }}>
-          <div style={{
-            width: 48, height: 48, borderRadius: '50%', margin: '0 auto 8px',
-            background: agentStatus === 'running' ? 'rgba(34,211,164,0.15)' : 'rgba(122,110,142,0.1)',
-            border: `2px solid ${agentStatus === 'running' ? 'var(--mint-500)' : 'var(--ink-300)'}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22,
-          }}>🧠</div>
-          <div style={{ fontWeight: 800, fontSize: 'var(--text-base)', color: 'var(--ink-900)' }}>
-            {agentStatus === 'running' ? 'Running' : agentStatus === 'paused' ? 'Paused' : 'Offline'}
-          </div>
-          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-500)', marginTop: 2 }}>
-            Spend today: <strong>{spend}</strong>
-          </div>
+    <Room icon="🧠" name="ELLIE" accent="var(--violet-500)" status={thinking || pipeline?.running ? 'online' : agentStatus}
+      style={{ gridArea: 'ellie' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, height: '100%' }}>
+
+        {/* Spend */}
+        <div style={{ fontSize: 11, color: 'var(--ink-500)', textAlign: 'center' }}>
+          Spend today: <strong style={{ color: 'var(--ink-800)' }}>{spend}</strong>
         </div>
 
-        {/* Recent notifications */}
-        <div>
-          <Label>Recent Alerts</Label>
-          {notifications.length === 0
-            ? <Empty>No alerts yet</Empty>
-            : notifications.map((n, i) => (
-              <div key={i} style={{
-                fontSize: 11, color: 'var(--ink-600)', padding: '4px 0',
-                borderBottom: i < notifications.length - 1 ? '1px solid var(--paper-200)' : 'none',
-                lineHeight: 1.4,
-              }}>{n.summary}</div>
-            ))
-          }
+        {/* Pipeline progress */}
+        {pipelineActive && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em',
+                color: pipeline.step === 'error' ? 'var(--coral-500)' : pipeline.step === 'done' ? 'var(--mint-500)' : 'var(--violet-500)' }}>
+                {pipeline.step === 'done' ? '✓ Done' : pipeline.step === 'error' ? '✕ Error' : `⚙ ${pipeline.step}`}
+              </span>
+              <span style={{ fontSize: 10, color: 'var(--ink-400)', fontFamily: 'var(--font-mono)' }}>{pipeline.pct}%</span>
+            </div>
+            <div style={{ height: 5, background: 'var(--paper-200)', borderRadius: 99, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${pipeline.pct}%`, borderRadius: 99, transition: 'width 0.4s ease',
+                background: pipeline.step === 'error' ? 'var(--coral-500)' : pipeline.step === 'done' ? 'var(--mint-500)' : 'var(--violet-500)' }} />
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--ink-500)', lineHeight: 1.4 }}>{pipeline.detail}</div>
+          </div>
+        )}
+
+        {/* Plan confirmation card */}
+        {plan && !plan.error && (
+          <div style={{ background: 'rgba(122,110,142,0.07)', border: '1.5px solid var(--violet-500)',
+            borderRadius: 'var(--radius-md)', padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--violet-500)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              ELLIE's Plan
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--ink-800)', fontWeight: 600, lineHeight: 1.4 }}>
+              {plan.understood_intent}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--ink-500)', lineHeight: 1.5 }}>
+              {plan.interpretation}
+            </div>
+            {plan.niches?.map((n, i) => (
+              <div key={i} style={{ background: 'var(--paper-100)', borderRadius: 'var(--radius-sm)', padding: '8px 10px' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-800)', marginBottom: 3 }}>{n.name}</div>
+                <div style={{ fontSize: 10, color: 'var(--ink-500)', marginBottom: 4 }}>{n.description}</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {n.suggested_products?.map(p => (
+                    <span key={p} style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 99,
+                      background: 'rgba(122,110,142,0.12)', color: 'var(--violet-500)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      {p}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {plan.market_reasoning && (
+              <div style={{ fontSize: 10, color: 'var(--ink-400)', fontStyle: 'italic', lineHeight: 1.4 }}>
+                {plan.market_reasoning}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+              <Btn onClick={confirmPlan} disabled={confirming} color="var(--violet-500)">
+                {confirming ? '⏳ Starting…' : '✓ Run it'}
+              </Btn>
+              <Btn onClick={() => setPlan(null)} color="var(--ink-400)">✕ Cancel</Btn>
+            </div>
+          </div>
+        )}
+        {plan?.error && (
+          <div style={{ fontSize: 11, color: 'var(--coral-500)' }}>{plan.error}</div>
+        )}
+
+        {/* Command input */}
+        <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <Label>Tell ELLIE what to do</Label>
+          <textarea
+            value={cmd}
+            onChange={e => setCmd(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendCommand() } }}
+            placeholder="e.g. lets focus on cats and Jesus…"
+            rows={2}
+            disabled={thinking || pipeline?.running}
+            style={{ width: '100%', resize: 'none', padding: '8px 10px',
+              border: '1px solid var(--ink-300)', borderRadius: 'var(--radius-sm)',
+              background: 'var(--paper-100)', color: 'var(--ink-900)',
+              fontFamily: 'var(--font-ui)', fontSize: 12 }}
+          />
+          <Btn onClick={sendCommand} disabled={thinking || !cmd.trim() || pipeline?.running} color="var(--violet-500)">
+            {thinking ? '⏳ Thinking…' : '→ Send'}
+          </Btn>
         </div>
       </div>
     </Room>
@@ -309,12 +419,12 @@ function NovaRoom({ trends, onRun }) {
 
   return (
     <Room icon="🔭" name="Nova · Research" accent="var(--mint-500)"
-      status={running ? 'online' : recent.length > 0 ? 'online' : 'idle'}
-      action={<Btn onClick={handleRun} disabled={running} color="var(--mint-500)" small>
-        {running ? '⏳' : '▶ Run'}
-      </Btn>}>
+      status={running ? 'online' : recent.length > 0 ? 'online' : 'idle'}>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <Btn onClick={handleRun} disabled={running} color="var(--mint-500)">
+          {running ? '⏳ Researching…' : '▶ Run Nova'}
+        </Btn>
         {recent.length === 0
           ? <Empty>No trend reports yet — click Run to research niches</Empty>
           : recent.map((t, i) => (
@@ -517,7 +627,7 @@ export default function BusinessFactory() {
       {/* Floor plan grid */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: '220px 1fr 220px',
+        gridTemplateColumns: '220px 1fr 260px',
         gridTemplateRows: 'auto auto',
         gridTemplateAreas: `
           "ellie forge nova"
@@ -526,9 +636,7 @@ export default function BusinessFactory() {
         gap: 16,
       }}>
         {/* ELLIE */}
-        <div style={{ gridArea: 'ellie' }}>
-          <EllieRoom status={status} activity={activity} />
-        </div>
+        <EllieRoom status={status} activity={activity} onRefresh={fetchAll} />
 
         {/* FORGE */}
         <ForgeRoom

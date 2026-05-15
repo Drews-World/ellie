@@ -67,7 +67,7 @@ def _get_trend_report(niche: str) -> str:
         db = get_db()
         rows = (
             db.table("trends")
-            .select("concept,evidence")
+            .select("opportunity,top_tags,raw_data")
             .eq("niche", niche)
             .order("observed_at", desc=True)
             .limit(1)
@@ -76,24 +76,46 @@ def _get_trend_report(niche: str) -> str:
         if not rows.data:
             return "No trend data yet for this niche."
         row = rows.data[0]
-        evidence = row.get("evidence") or {}
+        raw = row.get("raw_data") or {}
         return (
-            f"Recommendation: {row['concept']}\n"
-            f"Top tags: {', '.join(evidence.get('top_tags', []))}\n"
-            f"Style themes: {', '.join(evidence.get('style_themes', []))}"
+            f"Recommendation: {row.get('opportunity', '')}\n"
+            f"Top tags: {', '.join(row.get('top_tags', []))}\n"
+            f"Style themes: {', '.join(raw.get('style_themes', []))}"
         )
     except Exception:
         return "Trend data unavailable."
 
 
-def generate_concepts(niche: str, n: int = 5) -> list[dict]:
+def _get_recommended_products(niche: str) -> list[str] | None:
+    """Get Nova's recommended product types for this niche (stored in raw_data)."""
+    try:
+        db = get_db()
+        rows = (
+            db.table("trends")
+            .select("raw_data")
+            .eq("niche", niche)
+            .order("observed_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if rows.data:
+            raw = rows.data[0].get("raw_data") or {}
+            return raw.get("recommended_products")
+    except Exception:
+        pass
+    return None
+
+
+def generate_concepts(niche: str, n: int = 5, products: list[str] | None = None) -> list[dict]:
     """Step 3: LLM generates design concepts. Returns list of concept dicts."""
     style_memory = _get_style_memory(niche)
     trend_report = _get_trend_report(niche)
+    product_list = ", ".join(products) if products else "t-shirt, hoodie, mug, tote bag, poster, phone case"
 
     prompt = CONCEPT_PROMPT.format(
         n=n,
         niche=niche,
+        products=product_list,
         style_memory=style_memory,
         trend_report=trend_report,
     )
@@ -154,7 +176,7 @@ def _save_design(niche: str, concept: dict, score: float, image_url: str = "") -
             "concept_name": concept.get("name", "Untitled"),
             "image_prompt": concept.get("image_prompt", ""),
             "sell_reason": concept.get("sell_reason", ""),
-            "products": concept.get("products", ["mug"]),
+            "products": concept.get("products", ["t-shirt", "mug"]),
             "image_url": image_url,
             "forge_score": score,
             "status": "pending_drew_review",
@@ -189,7 +211,7 @@ def _upload_image_to_storage(design_id: str, image_bytes: bytes) -> str:
         return ""
 
 
-def run_forge(niche: str, n_concepts: int = 5, progress_cb=None) -> list[dict]:
+def run_forge(niche: str, n_concepts: int = 5, products: list[str] | None = None, progress_cb=None) -> list[dict]:
     """
     Full Forge run for one niche.
     Returns list of designs that passed scoring, saved to DB pending Drew review.
@@ -200,11 +222,15 @@ def run_forge(niche: str, n_concepts: int = 5, progress_cb=None) -> list[dict]:
             progress_cb(step, detail, pct)
         logger.info(f"Forge [{pct}%] {step}: {detail}")
 
-    logger.info(f"Forge: starting run for niche='{niche}', n={n_concepts}")
+    # Use Nova's product recommendations if no explicit products given
+    if not products:
+        products = _get_recommended_products(niche)
+
+    logger.info(f"Forge: starting run for niche='{niche}', n={n_concepts}, products={products}")
     _progress("concepts", f"Generating {n_concepts} design concepts for '{niche}'…", 5)
 
     # Steps 1-3: Generate concepts
-    concepts = generate_concepts(niche, n=n_concepts)
+    concepts = generate_concepts(niche, n=n_concepts, products=products)
     if not concepts:
         logger.error("Forge: no concepts generated, aborting")
         return []
