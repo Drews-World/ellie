@@ -1,0 +1,81 @@
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  border-bottom: 1.5px solid var(--ink-300);
+  background: var(--paper-50);
+  position: relative;
+  flex-shrink: 0;
+  z-index: 1100;
+  box-shadow: var(--shadow-sm);
+}
+
+.left { display: flex; align-items: center; gap: 12px; }
+
+.logoIcon {
+  width: 34px; height: 34px;
+  border-radius: var(--radius-full);
+  background: var(--grad-sunrise);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+}
+
+.logoName {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  background: var(--grad-sunrise);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.logoSub {
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--ink-500);
+  letter-spacing: 0.04em;
+  margin-top: 1px;
+}
+
+.center { text-align: center; }
+.centerTitle {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: var(--ink-500);
+  letter-spacing: 0.05em;
+}
+.centerSub {
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--ink-300);
+  margin-top: 2px;
+}
+
+.right { display: flex; align-items: center; gap: 12px; }
+.timeBlock { text-align: right; }
+.time {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--ink-700);
+  font-weight: 500;
+}
+.date {
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--ink-500);
+  margin-top: 1px;
+}
+.statusDot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--mint-500);
+  box-shadow: 0 0 6px var(--mint-500);
+  animation: blink 2.5s ease-in-out infinite;
+}
+@keyframes blink {
+  0%, 90%, 100% { opacity: 1; }
+  45% { opacity: 0.3; }
+}

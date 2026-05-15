@@ -1,0 +1,39 @@
+.root { display: flex; flex-direction: column; gap: 28px; padding: 8px 0; animation: fade-up 0.3s ease; }
+@keyframes fade-up { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+.greeting { display: flex; align-items: baseline; gap: 12px; }
+.greetLabel { font-family: var(--font-mono); font-size: 11px; color: var(--ink-500); letter-spacing: 3px; }
+.greetName { font-family: var(--font-pixel); font-size: 24px; color: var(--peach-500); letter-spacing: 4px; font-weight: 900; }
+.greetSub { font-family: var(--font-mono); font-size: 10px; color: var(--ink-500); letter-spacing: 2px; margin-top: -8px; }
+
+.modes { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.modeCard {
+  background: var(--paper-100);
+  border: 1.5px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  padding: 28px 24px;
+  cursor: pointer;
+  text-decoration: none;
+  color: var(--ink-900);
+  display: flex; flex-direction: column; gap: 8px;
+  transition: all 0.18s ease;
+  position: relative; overflow: hidden;
+}
+.modeCard::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: var(--grad-sunrise); opacity: 0.4; transition: opacity 0.18s ease;
+}
+.modeCard:hover { border-color: var(--peach-500); background: var(--paper-200); }
+.modeCard:hover::before { opacity: 1; }
+.modeIcon { font-size: 28px; margin-bottom: 4px; }
+.modeTitle { font-family: var(--font-pixel); font-size: 11px; letter-spacing: 2px; color: var(--violet-500); }
+.modeSub { font-family: var(--font-ui); font-size: 12px; color: var(--ink-500); line-height: 1.6; }
+.modeArrow { font-family: var(--font-mono); font-size: 10px; color: var(--peach-500); margin-top: 8px; letter-spacing: 2px; }
+
+.quickStats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.stat {
+  background: var(--paper-100); border: 1.5px solid var(--ink-300);
+  border-radius: var(--radius-md); padding: 14px;
+}
+.statLabel { font-family: var(--font-ui); font-size: 10px; font-weight: 700; letter-spacing: 1px; color: var(--ink-500); margin-bottom: 6px; text-transform: uppercase; }
+.statVal { font-family: var(--font-mono); font-size: 20px; color: var(--ink-900); }

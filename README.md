@@ -1,45 +1,75 @@
-# ELLIE — Executive Life Logic Intelligence Engine
-> Personal command center for Drew. Two modes: the world, and your life.
+# ELLIE Hub
 
-## Stack
-- **Frontend**: React + Vite + React Router
-- **Backend**: FastAPI + SQLAlchemy (async)
-- **Database**: Supabase (PostgreSQL)
-- **Auth**: Clerk
-- **Hosting**: Vercel (frontend) + Railway (backend)
+> Drew's personal command center. A **web app** that's the hub for ELLIE's growing crew: ellietrading, elliebusiness, and Drew's own life. Navigate it like an open office — pick a door, enter a room.
 
-## Quick Start
+## Layout
 
-### 1. Install
-```bash
-# Frontend
-cd frontend && npm install
-
-# Backend
-cd backend && pip install -r requirements.txt
+```
+ellie/
+├── webapp/             ← THE REAL ELLIE HUB
+│   ├── backend/        FastAPI (Clerk auth, Supabase DB, Gemini-powered chat)
+│   ├── frontend/       React + Vite (the office UI)
+│   └── README.md
+│
+├── elliebusiness/      ← FastAPI service for the "Ultron / Forge / Nova" agent crew.
+│                         Stub today; real agents in Phase 2.
+│
+├── references/
+│   └── openhuman/      ← tinyhumansai/openhuman source — UI/architecture reference only.
+│
+├── hub/                ← OBSOLETE — leftover OpenHuman copy, duplicates references/openhuman/.
+│                         Run: Remove-Item -Recurse -Force hub  (Cowork sandbox couldn't delete it).
+│
+├── archive/            ← Junk folder (old-misnamed-folder).
+│
+├── docs/
+│   ├── ELLIE_REBUILD_PLAN.md      ← The full build plan (read first).
+│   ├── DESIGN_LANGUAGE.md         ← Visual brief for the rebrand.
+│   ├── SUBSYSTEM_CONTRACT.md      ← Contract every sub-system implements.
+│   └── CLAUDE_CODE_HANDOFF.md     ← Where the previous session left off.
+│
+├── README.md           ← this file
+└── COWORK_SETUP.md
 ```
 
-### 2. Environment variables
-Copy `.env.example` to `.env` in both directories and fill in your keys.
+Sibling repo (separate, not in this monorepo):
+- **`ellietrading`** — fork of TauricResearch/TradingAgents at `C:\Users\humes\Desktop\Projects\ellietrading\`. Tracked separately so we can pull upstream updates.
 
-### 3. Run locally
-```bash
-# Terminal 1
-cd backend && uvicorn main:app --reload --port 8000
+## Quick start
 
-# Terminal 2
-cd frontend && npm run dev
+### 1. Run the elliebusiness stub
+```powershell
+cd elliebusiness
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8001
 ```
+Test: `curl http://localhost:8001/health` → `{"ok": true, ...}`
 
-## API Keys Needed
-| Service | Purpose | Free Tier |
-|---------|---------|-----------|
-| Clerk | Auth | Yes |
-| Supabase | Database | Yes |
-| NewsAPI | World news | Yes |
-| OpenWeatherMap | Weather | Yes |
-| Polygon.io | Stocks | Yes (delayed) |
-| CoinGecko | Crypto | No key needed |
-| SportsRadar | Sports | Trial |
-| Google Calendar API | Calendar sync | Yes |
-| Anthropic | ELLIE AI briefs | Pay-as-you-go |
+### 2. Run ELLIE Hub (web app)
+```powershell
+# Backend (FastAPI)
+cd webapp/backend
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+
+# In another terminal — Frontend (Vite)
+cd webapp/frontend
+npm install
+npm run dev
+```
+Open http://localhost:5173. You'll need `.env` files in both `webapp/backend/` and `webapp/frontend/` — see `docs/ELLIE_REBUILD_PLAN.md` for keys.
+
+## Status
+
+- Plan v4 written (web app, office metaphor, Gemini-direct).
+- Design language spec written.
+- `elliebusiness/` stub running, contract-compliant.
+- `webapp/` is the existing ELLIE codebase (formerly `archive/`). Works as-is; rebrand pending.
+- Next: rebrand pass (theme tokens, Lobby page, sub-system rooms) — Claude Code's job.
+
+## Read these first if you're picking this up
+
+1. `docs/ELLIE_REBUILD_PLAN.md` — what we're building and why
+2. `docs/DESIGN_LANGUAGE.md` — what it should look like
+3. `docs/SUBSYSTEM_CONTRACT.md` — how the hub talks to ellietrading + elliebusiness
+4. `docs/CLAUDE_CODE_HANDOFF.md` — running state of the work

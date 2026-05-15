@@ -1,0 +1,8 @@
+services:
+  elliebusiness:
+    build: .
+    ports:
+      - "8001:8001"
+    environment:
+      ELLIEBUSINESS_AUTH_TOKEN: ${ELLIEBUSINESS_AUTH_TOKEN:-dev-token}
+    restart: unless-stopped

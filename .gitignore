@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Env files — NEVER commit secrets
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Docs (internal planning — excluded from public repo)
+docs/
+
+# Claude Code session data
+.claude/
+
+# OpenHuman reference — large Rust/Tauri repo, reference only
+references/openhuman/
