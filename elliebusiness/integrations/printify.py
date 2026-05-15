@@ -41,6 +41,11 @@ PRODUCT_CATALOG: dict[str, dict] = {
         ],
         "print_area": "front",
         "price_cents": 2499,
+        # Print area: 12"×16" portrait at 150 DPI. Scale=0.75 fills ~9" of the 12" wide
+        # chest — centered, intentional, not edge-to-edge.
+        "image_scale": 0.75,
+        "image_x": 0.5,
+        "image_y": 0.42,  # Slightly above center (upper chest)
     },
     "hoodie": {
         "blueprint_id": 77,
@@ -53,6 +58,10 @@ PRODUCT_CATALOG: dict[str, dict] = {
         ],
         "print_area": "front",
         "price_cents": 4499,
+        # Same chest print area as t-shirt; slightly smaller to account for kangaroo pocket area.
+        "image_scale": 0.70,
+        "image_x": 0.5,
+        "image_y": 0.40,
     },
     "mug": {
         "blueprint_id": 68,
@@ -60,6 +69,12 @@ PRODUCT_CATALOG: dict[str, dict] = {
         "variant_ids": [33719],
         "print_area": "front",
         "price_cents": 1699,
+        # 11oz mug wrap: ~8.07"×3.63" landscape (aspect ratio ≈ 2.22).
+        # A square image at scale=1 would span full width but be clipped ~55% top/bottom.
+        # scale=0.42 makes image height ≈ mug print height with small margins.
+        "image_scale": 0.42,
+        "image_x": 0.5,
+        "image_y": 0.5,
     },
     "mug_15oz": {
         "blueprint_id": 425,
@@ -67,6 +82,11 @@ PRODUCT_CATALOG: dict[str, dict] = {
         "variant_ids": [62014],
         "print_area": "front",
         "price_cents": 1899,
+        # 15oz mug wrap: ~8.07"×4.72" landscape (aspect ratio ≈ 1.71).
+        # scale=0.55 fits image height within the taller 15oz print area.
+        "image_scale": 0.55,
+        "image_x": 0.5,
+        "image_y": 0.5,
     },
     "tote bag": {
         "blueprint_id": 553,
@@ -74,6 +94,10 @@ PRODUCT_CATALOG: dict[str, dict] = {
         "variant_ids": [70603, 70646],
         "print_area": "front",
         "price_cents": 1999,
+        # Canvas tote print area is square-ish. Scale=0.85 fills nicely with small margin.
+        "image_scale": 0.85,
+        "image_x": 0.5,
+        "image_y": 0.5,
     },
     "poster": {
         "blueprint_id": 282,
@@ -81,6 +105,10 @@ PRODUCT_CATALOG: dict[str, dict] = {
         "variant_ids": [43135, 43138, 43141, 43144, 43147, 43150],
         "print_area": "front",
         "price_cents": 1699,
+        # Poster is portrait (12"×16" and larger). Fill edge-to-edge — art prints look best full bleed.
+        "image_scale": 1.0,
+        "image_x": 0.5,
+        "image_y": 0.5,
     },
     "pillow": {
         "blueprint_id": 220,
@@ -88,6 +116,10 @@ PRODUCT_CATALOG: dict[str, dict] = {
         "variant_ids": [41521, 41524, 41527, 41530, 244992, 244993],
         "print_area": "front",
         "price_cents": 2999,
+        # 14"×14" square sublimation pillow. Full bleed looks great.
+        "image_scale": 1.0,
+        "image_x": 0.5,
+        "image_y": 0.5,
     },
 }
 
@@ -298,7 +330,10 @@ def _get_nova_tags(niche: str) -> list[str]:
 
 def approve_and_publish(design_id: str) -> dict:
     """
-    Full pipeline: approved design → live Etsy listings.
+    Full pipeline: approved design → Printify drafts ready for your review.
+
+    Products are created in Printify as drafts with correct placement/scaling.
+    You approve and publish from the Printify dashboard — nothing goes live automatically.
 
     1. Fetch design from DB
     2. Download image from Supabase Storage
@@ -306,8 +341,8 @@ def approve_and_publish(design_id: str) -> dict:
        a. Resolve to Printify blueprint/variants
        b. Generate listing copy
        c. Upload image to Printify
-       d. Create + publish product
-    4. Update design status to 'published'
+       d. Create product (draft — no publish call)
+    4. Update design status to 'draft_on_printify'
     5. Return summary
     """
     from core.supabase_client import get_db
@@ -386,22 +421,22 @@ def approve_and_publish(design_id: str) -> dict:
             for vid in spec["variant_ids"]
         ]
 
-        # Build print_areas
+        # Build print_areas using per-product scale/position from catalog
         print_areas = [{
             "variant_ids": spec["variant_ids"],
             "placeholders": [{
                 "position": spec["print_area"],
                 "images": [{
                     "id": printify_image_id,
-                    "x": 0.5,
-                    "y": 0.5,
-                    "scale": 1,
+                    "x": spec.get("image_x", 0.5),
+                    "y": spec.get("image_y", 0.5),
+                    "scale": spec.get("image_scale", 0.8),
                     "angle": 0,
                 }],
             }],
         }]
 
-        # Create product
+        # Create product as draft (no publish call — Drew approves in Printify)
         try:
             product = create_product(
                 title=copy["title"][:140],
@@ -413,34 +448,21 @@ def approve_and_publish(design_id: str) -> dict:
                 tags=copy.get("tags", nova_tags)[:13],
             )
             product_id = product.get("id")
-            logger.info(f"Printify: created product {product_id} for '{product_name}'")
+            logger.info(f"Printify: created draft {product_id} for '{product_name}'")
         except Exception as e:
             logger.error(f"Printify: product creation failed for {product_name}: {e}")
             skipped.append({"product": product_name, "reason": str(e)})
             continue
 
-        # Publish to Etsy
-        try:
-            publish_product(product_id)
-            logger.info(f"Printify: published {product_id}")
-            published.append({
-                "product": product_name,
-                "product_id": product_id,
-                "title": copy["title"][:80],
-                "price_usd": variant_price,
-            })
-        except Exception as e:
-            logger.warning(f"Printify: publish failed for {product_id}: {e} — product saved as draft")
-            published.append({
-                "product": product_name,
-                "product_id": product_id,
-                "title": copy["title"][:80],
-                "price_usd": variant_price,
-                "draft_only": True,
-            })
+        published.append({
+            "product": product_name,
+            "product_id": product_id,
+            "title": copy["title"][:80],
+            "price_usd": variant_price,
+        })
 
     # 4. Update design status
-    final_status = "published" if published else "publish_failed"
+    final_status = "draft_on_printify" if published else "publish_failed"
     try:
         db.table("designs").update({"status": final_status}).eq("id", design_id).execute()
     except Exception as e:
@@ -449,7 +471,7 @@ def approve_and_publish(design_id: str) -> dict:
     return {
         "design_id": design_id,
         "concept_name": concept_name,
-        "published": published,
+        "drafts": published,
         "skipped": skipped,
         "status": final_status,
     }
