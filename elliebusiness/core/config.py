@@ -16,8 +16,8 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-2.0-flash"
 
     # ── Image gen ────────────────────────────────────────────────────────────
-    openai_api_key: str = ""         # Required for Forge image generation
-    image_gen_model: str = "gpt-image-2"
+    openai_api_key: str = ""         # Required for Forge image generation (platform.openai.com)
+    image_gen_model: str = "dall-e-3"  # dall-e-3 (~$0.04/img) or gpt-image-2 (better, pricier)
 
     # ── Supabase ─────────────────────────────────────────────────────────────
     supabase_url: str = ""

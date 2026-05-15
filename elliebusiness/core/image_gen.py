@@ -1,43 +1,37 @@
 """
-Image generation client — OpenAI direct (GPT Image 2).
-No OpenRouter equivalent today; must use OpenAI directly.
+Image generation — OpenAI direct required (DALL-E 3 or GPT Image 2).
+OpenRouter does not proxy image generation endpoints.
+Set OPENAI_API_KEY in .env to activate Forge image generation.
 """
 from __future__ import annotations
 
 import base64
-import httpx
-
 from openai import OpenAI
-
 from .config import get_settings
 
 
-def get_image_client() -> OpenAI:
+def _get_client() -> tuple[OpenAI, str]:
     s = get_settings()
     if not s.openai_api_key:
         raise RuntimeError(
-            "OPENAI_API_KEY not set. GPT Image 2 requires a direct OpenAI key."
+            "Image generation requires OPENAI_API_KEY in .env — "
+            "OpenRouter does not support image generation. "
+            "Get a key at platform.openai.com (DALL-E 3 costs ~$0.04/image)."
         )
-    return OpenAI(api_key=s.openai_api_key)
+    return OpenAI(api_key=s.openai_api_key), s.image_gen_model
 
 
 def generate_image(prompt: str, size: str = "1024x1024") -> bytes:
-    """Generate one image and return raw PNG bytes."""
-    s = get_settings()
-    client = get_image_client()
-
+    client, model = _get_client()
     response = client.images.generate(
-        model=s.image_gen_model,
+        model=model,
         prompt=prompt,
         n=1,
         size=size,
         response_format="b64_json",
     )
-
-    b64 = response.data[0].b64_json
-    return base64.b64decode(b64)
+    return base64.b64decode(response.data[0].b64_json)
 
 
 def generate_images(prompts: list[str], size: str = "1024x1024") -> list[bytes]:
-    """Generate multiple images (sequential — rate limit aware)."""
     return [generate_image(p, size) for p in prompts]
