@@ -29,6 +29,8 @@ def generate_image(prompt: str, size: str = "1024x1024") -> bytes:
         prompt=prompt,
         n=1,
         size=size,
+        background="transparent",  # PNG with alpha — works on any merch color
+        output_format="png",
     )
     item = response.data[0]
     if getattr(item, "b64_json", None):

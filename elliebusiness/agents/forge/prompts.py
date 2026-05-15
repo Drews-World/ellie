@@ -20,7 +20,8 @@ Nova's current trend report for this niche:
 
 For each concept:
 - Pick a short concept name (3-5 words)
-- Write a detailed image generation prompt (subject, style, colors, typography, composition — be specific)
+- Write a detailed image generation prompt (subject, style, colors, typography, composition -- be specific)
+- CRITICAL: Designs are rendered with a transparent background and printed on colored merch (black shirts, dark mugs, colored totes, etc.). Never mention a white or solid-color background. Use strong ink outlines, drop shadows, or bold fills so the design reads clearly on both light and dark surfaces.
 - Write a short catchphrase or tagline that could appear on the product (optional but preferred)
 - Explain why this will sell in one sentence
 - List which of the target products this design suits best
@@ -30,9 +31,9 @@ Respond with JSON:
   "concepts": [
     {{
       "name": "Blessed Little Meow",
-      "image_prompt": "Cute cartoon cat wearing a tiny golden halo, sitting with paws folded together as if praying, warm pastel illustration, soft linework, 'God's Favorite Creature' in hand-lettered serif below, white background, works on both light apparel and mugs",
+      "image_prompt": "Cute cartoon cat wearing a tiny golden halo, sitting with paws folded together as if praying, warm pastel illustration with bold ink outlines, transparent background, 'God's Favorite Creature' in hand-lettered serif below with a subtle drop shadow, design reads clearly on both light and dark surfaces",
       "tagline": "God's Favorite Creature",
-      "sell_reason": "Cat lovers + Christian gift market crossover — specific, underserved, high purchase intent",
+      "sell_reason": "Cat lovers + Christian gift market crossover -- specific, underserved, high purchase intent",
       "products": ["t-shirt", "mug", "tote bag"]
     }}
   ]
