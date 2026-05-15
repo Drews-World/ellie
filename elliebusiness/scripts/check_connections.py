@@ -72,7 +72,7 @@ else:
         from openai import OpenAI
         or_client = OpenAI(api_key=OPENROUTER_API_KEY, base_url="https://openrouter.ai/api/v1/")
         resp = or_client.chat.completions.create(
-            model="google/gemini-flash-1.5",
+            model="openai/gpt-4o-mini",
             messages=[{"role": "user", "content": "Reply: OK"}],
             max_tokens=5,
         )

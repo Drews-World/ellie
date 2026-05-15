@@ -1,240 +1,442 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import RoomShell from '../components/shared/RoomShell'
-import KpiCard from '../components/shared/KpiCard'
 import StatusPill from '../components/shared/StatusPill'
 import api from '../lib/api'
 
-const AGENTS = [
-  { name: 'ELLIE',    role: 'Supervisor',       icon: '🧠' },
-  { name: 'Forge',    role: 'Designer',          icon: '🔨' },
-  { name: 'Nova',     role: 'Research',          icon: '🔭' },
-  { name: 'Archives', role: 'Memory & Feedback', icon: '🗄️' },
-  { name: 'Treasury', role: 'Cost Tracker',      icon: '💰' },
-]
-
-const KIND_COLORS = {
-  notification: 'var(--violet-500)',
-  forge:        'var(--amber-500)',
-  nova:         'var(--mint-500)',
-  sale:         'var(--rose-500)',
-  error:        'var(--coral-500)',
-  info:         'var(--ink-400)',
-}
-
-function formatTs(ts) {
-  try {
-    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  } catch { return '' }
-}
-
-function LogPanel({ items, loading }) {
-  const bottomRef = useRef(null)
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [items.length])
-
-  return (
-    <div style={{
-      background: '#0d0d0d',
-      border: '1.5px solid var(--ink-300)',
-      borderRadius: 'var(--radius-lg)',
-      padding: '16px 0 8px',
-      display: 'flex',
-      flexDirection: 'column',
-      height: 320,
-      boxShadow: 'var(--shadow-sm)',
-    }}>
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: '0 16px 12px',
-        borderBottom: '1px solid #1f1f1f',
-      }}>
-        <span style={{
-          width: 8, height: 8, borderRadius: '50%',
-          background: loading ? 'var(--ink-300)' : '#22d18a',
-          boxShadow: loading ? 'none' : '0 0 6px #22d18a88',
-          display: 'inline-block',
-        }} />
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#888', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-          Live Log
-        </span>
-        <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 10, color: '#444' }}>
-          {items.length} entries
-        </span>
-      </div>
-
-      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
-        {items.length === 0 ? (
-          <div style={{ padding: '24px 16px', fontFamily: 'var(--font-mono)', fontSize: 12, color: '#333' }}>
-            {loading ? 'connecting...' : '// no activity yet — start elliebusiness on :8001'}
-          </div>
-        ) : (
-          items.map((item, i) => (
-            <div key={i} style={{
-              display: 'flex',
-              gap: 12,
-              padding: '3px 16px',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 12,
-              lineHeight: 1.5,
-            }}>
-              <span style={{ color: '#444', flexShrink: 0, width: 80 }}>{formatTs(item.ts)}</span>
-              <span style={{
-                color: KIND_COLORS[item.kind] || KIND_COLORS.info,
-                flexShrink: 0,
-                width: 90,
-              }}>[{item.kind}]</span>
-              <span style={{ color: '#ccc' }}>{item.summary}</span>
-            </div>
-          ))
-        )}
-        <div ref={bottomRef} />
-      </div>
-    </div>
-  )
-}
-
-function DesignCard({ design, onVerdict }) {
+// ── Shared room card wrapper ──────────────────────────────────────────────────
+function Room({ icon, name, accent, status, action, children, style = {} }) {
   return (
     <div style={{
       background: 'var(--paper-50)',
       border: '1.5px solid var(--ink-300)',
-      borderRadius: 'var(--radius-md)',
-      padding: 16,
+      borderRadius: 'var(--radius-lg)',
       display: 'flex',
-      gap: 16,
-      alignItems: 'flex-start',
+      flexDirection: 'column',
+      overflow: 'hidden',
+      boxShadow: 'var(--shadow-sm)',
+      ...style,
     }}>
-      {design.image_url ? (
-        <img src={design.image_url} alt={design.concept_name}
-          style={{ width: 80, height: 80, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />
-      ) : (
-        <div style={{
-          width: 80, height: 80, borderRadius: 8, background: 'var(--paper-200)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 28, flexShrink: 0,
-        }}>🎨</div>
-      )}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--ink-900)', marginBottom: 2 }}>
-          {design.concept_name}
-        </div>
-        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-500)', marginBottom: 4 }}>
-          {design.niche} · score {(design.forge_score * 100).toFixed(0)}%
-        </div>
-        {design.sell_reason && (
-          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-400)', marginBottom: 8, fontStyle: 'italic' }}>
-            {design.sell_reason}
-          </div>
-        )}
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => onVerdict(design.id, 'approve')} style={verdictBtn('var(--mint-500)')}>✓ Approve</button>
-          <button onClick={() => onVerdict(design.id, 'iterate')} style={verdictBtn('var(--amber-500)')}>↻ Iterate</button>
-          <button onClick={() => onVerdict(design.id, 'reject')} style={verdictBtn('var(--coral-500)')}>✕ Reject</button>
-        </div>
+      {/* Room header */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '12px 16px',
+        borderBottom: '1px solid var(--paper-200)',
+        background: 'var(--paper-100)',
+        flexShrink: 0,
+      }}>
+        <span style={{ fontSize: 16 }}>{icon}</span>
+        <span style={{ fontWeight: 800, fontSize: 'var(--text-sm)', color: 'var(--ink-900)', letterSpacing: '-0.01em' }}>{name}</span>
+        <StatusPill status={status ?? 'offline'} label={status ?? 'offline'} />
+        {action && <div style={{ marginLeft: 'auto' }}>{action}</div>}
+      </div>
+      {/* Room body */}
+      <div style={{ flex: 1, padding: 16, overflowY: 'auto', minHeight: 0 }}>
+        {children}
       </div>
     </div>
   )
 }
 
-function verdictBtn(color) {
+function Btn({ onClick, disabled, color = 'var(--violet-500)', children, small }) {
+  return (
+    <button onClick={onClick} disabled={disabled} style={{
+      background: `color-mix(in srgb, ${color} 12%, transparent)`,
+      border: `1.5px solid ${color}`,
+      borderRadius: 'var(--radius-sm)',
+      color,
+      fontFamily: 'var(--font-ui)',
+      fontWeight: 700,
+      fontSize: small ? 11 : 12,
+      padding: small ? '3px 10px' : '6px 14px',
+      cursor: disabled ? 'not-allowed' : 'pointer',
+      opacity: disabled ? 0.5 : 1,
+      whiteSpace: 'nowrap',
+      transition: 'opacity var(--transition)',
+    }}>{children}</button>
+  )
+}
+
+function Label({ children }) {
+  return (
+    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--ink-400)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>
+      {children}
+    </div>
+  )
+}
+
+function Empty({ children }) {
+  return <p style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-300)', fontStyle: 'italic' }}>{children}</p>
+}
+
+// ── ELLIE supervisor room ─────────────────────────────────────────────────────
+function EllieRoom({ status, activity }) {
+  const agentStatus = status?.agents?.find(a => a.name === 'ELLIE')?.status ?? 'offline'
+  const notifications = activity?.items?.slice(-5).reverse() ?? []
+  const spend = status?.metrics?.find(m => m.label === 'Spend today')?.value ?? '—'
+
+  return (
+    <Room icon="🧠" name="ELLIE" accent="var(--violet-500)" status={agentStatus}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {/* Big status */}
+        <div style={{ textAlign: 'center', padding: '12px 0 8px' }}>
+          <div style={{
+            width: 48, height: 48, borderRadius: '50%', margin: '0 auto 8px',
+            background: agentStatus === 'running' ? 'rgba(34,211,164,0.15)' : 'rgba(122,110,142,0.1)',
+            border: `2px solid ${agentStatus === 'running' ? 'var(--mint-500)' : 'var(--ink-300)'}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22,
+          }}>🧠</div>
+          <div style={{ fontWeight: 800, fontSize: 'var(--text-base)', color: 'var(--ink-900)' }}>
+            {agentStatus === 'running' ? 'Running' : agentStatus === 'paused' ? 'Paused' : 'Offline'}
+          </div>
+          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-500)', marginTop: 2 }}>
+            Spend today: <strong>{spend}</strong>
+          </div>
+        </div>
+
+        {/* Recent notifications */}
+        <div>
+          <Label>Recent Alerts</Label>
+          {notifications.length === 0
+            ? <Empty>No alerts yet</Empty>
+            : notifications.map((n, i) => (
+              <div key={i} style={{
+                fontSize: 11, color: 'var(--ink-600)', padding: '4px 0',
+                borderBottom: i < notifications.length - 1 ? '1px solid var(--paper-200)' : 'none',
+                lineHeight: 1.4,
+              }}>{n.summary}</div>
+            ))
+          }
+        </div>
+      </div>
+    </Room>
+  )
+}
+
+// ── FORGE design room ─────────────────────────────────────────────────────────
+const FORGE_PRESETS = [
+  { label: 'Etsy Profile',  prompt: 'Etsy shop profile picture — minimalist mountain adventure logo, square, bold clean lines', n: 3 },
+  { label: 'Shop Banner',   prompt: 'Etsy shop banner — wide minimalist mountain landscape, sunrise gradient, atmospheric', n: 3 },
+  { label: 'Mug Design',    prompt: 'minimalist mountain coffee mug print design, clean typography, earthy tones', n: 5 },
+  { label: 'Tee Design',    prompt: 'vintage adventure t-shirt graphic, mountain silhouette, retro sun badge', n: 5 },
+  { label: 'Logo Concept',  prompt: 'minimal outdoor brand logo concept, mountain peak, simple geometric', n: 3 },
+]
+
+function ForgeRoom({ queue, onRun, onVerdict, paused }) {
+  const [niche, setNiche] = useState('')
+  const [nConcepts, setNConcepts] = useState(5)
+  const [running, setRunning] = useState(false)
+
+  const agentStatus = running ? 'online' : queue.length > 0 ? 'online' : 'idle'
+
+  const handleRun = async () => {
+    if (!niche.trim()) return
+    setRunning(true)
+    await onRun(niche.trim(), nConcepts)
+    setRunning(false)
+  }
+
+  const applyPreset = (p) => {
+    setNiche(p.prompt)
+    setNConcepts(p.n)
+  }
+
+  return (
+    <Room icon="🔨" name="Forge · Design Room" accent="var(--amber-500)" status={running ? 'online' : agentStatus}
+      style={{ gridArea: 'forge' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+        {/* Etsy branding presets */}
+        <div>
+          <Label>Quick Presets</Label>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {FORGE_PRESETS.map(p => (
+              <button key={p.label} onClick={() => applyPreset(p)} style={{
+                background: niche === p.prompt ? 'rgba(255,178,63,0.2)' : 'var(--paper-100)',
+                border: `1px solid ${niche === p.prompt ? 'var(--amber-500)' : 'var(--ink-300)'}`,
+                borderRadius: 'var(--radius-sm)',
+                color: niche === p.prompt ? 'var(--amber-500)' : 'var(--ink-600)',
+                fontFamily: 'var(--font-ui)',
+                fontWeight: 600,
+                fontSize: 11,
+                padding: '5px 11px',
+                cursor: 'pointer',
+              }}>{p.label}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Trigger controls */}
+        <div>
+          <Label>Custom Prompt</Label>
+          <textarea
+            value={niche}
+            onChange={e => setNiche(e.target.value)}
+            placeholder="describe what to design..."
+            rows={2}
+            style={{
+              width: '100%', resize: 'none', padding: '8px 10px',
+              border: '1px solid var(--ink-300)', borderRadius: 'var(--radius-sm)',
+              background: 'var(--paper-100)', color: 'var(--ink-900)',
+              fontFamily: 'var(--font-ui)', fontSize: 12, marginBottom: 8,
+            }}
+          />
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {[1, 3, 5].map(n => (
+                <button key={n} onClick={() => setNConcepts(n)} style={{
+                  background: nConcepts === n ? 'rgba(255,178,63,0.2)' : 'var(--paper-100)',
+                  border: `1px solid ${nConcepts === n ? 'var(--amber-500)' : 'var(--ink-300)'}`,
+                  borderRadius: 'var(--radius-sm)',
+                  color: nConcepts === n ? 'var(--amber-500)' : 'var(--ink-500)',
+                  fontFamily: 'var(--font-mono)',
+                  fontWeight: 700, fontSize: 12,
+                  padding: '5px 10px', cursor: 'pointer',
+                }}>{n}</button>
+              ))}
+              <span style={{ fontSize: 11, color: 'var(--ink-400)', alignSelf: 'center', marginLeft: 4 }}>concepts</span>
+            </div>
+            <Btn onClick={handleRun} disabled={running || paused || !niche.trim()} color="var(--amber-500)">
+              {running ? '⏳ Running…' : '▶ Run Forge'}
+            </Btn>
+          </div>
+        </div>
+
+        {/* Design queue */}
+        <div>
+          <Label>Design Queue {queue.length > 0 ? `(${queue.length})` : ''}</Label>
+          {queue.length === 0
+            ? <Empty>No designs in queue — run Forge to generate</Empty>
+            : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8 }}>
+                {queue.slice(0, 12).map(d => (
+                  <div key={d.id} style={{
+                    background: 'var(--paper-100)', border: '1px solid var(--paper-200)',
+                    borderRadius: 'var(--radius-md)', overflow: 'hidden',
+                  }}>
+                    {d.image_url
+                      ? <img src={d.image_url} alt={d.concept_name} style={{ width: '100%', aspectRatio: '1', objectFit: 'cover' }} />
+                      : (
+                        <div style={{ width: '100%', aspectRatio: '1', background: 'var(--paper-200)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>🎨</div>
+                      )
+                    }
+                    <div style={{ padding: '6px 8px' }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--ink-700)', marginBottom: 4, lineHeight: 1.3 }}>{d.concept_name}</div>
+                      <div style={{ fontSize: 10, color: 'var(--ink-400)', marginBottom: 6 }}>score {((d.forge_score ?? 0) * 100).toFixed(0)}%</div>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button onClick={() => onVerdict(d.id, 'approve')} title="Approve" style={tinyBtn('var(--mint-500)')}>✓</button>
+                        <button onClick={() => onVerdict(d.id, 'iterate')} title="Iterate" style={tinyBtn('var(--amber-500)')}>↻</button>
+                        <button onClick={() => onVerdict(d.id, 'reject')} title="Reject" style={tinyBtn('var(--coral-500)')}>✕</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          }
+        </div>
+      </div>
+    </Room>
+  )
+}
+
+function tinyBtn(color) {
   return {
-    background: 'transparent',
-    border: `1px solid ${color}`,
-    borderRadius: 'var(--radius-sm)',
-    color,
-    fontFamily: 'var(--font-ui)',
-    fontWeight: 700,
-    fontSize: 11,
-    padding: '4px 10px',
-    cursor: 'pointer',
+    flex: 1, padding: '3px 0', background: 'transparent',
+    border: `1px solid ${color}`, borderRadius: 6,
+    color, fontWeight: 700, fontSize: 11, cursor: 'pointer',
   }
 }
 
+// ── NOVA research room ────────────────────────────────────────────────────────
+function NovaRoom({ trends, onRun }) {
+  const [running, setRunning] = useState(false)
+  const recent = trends?.trends?.slice(0, 5) ?? []
+
+  const handleRun = async () => {
+    setRunning(true)
+    await onRun()
+    setTimeout(() => setRunning(false), 3000)
+  }
+
+  return (
+    <Room icon="🔭" name="Nova · Research" accent="var(--mint-500)"
+      status={running ? 'online' : recent.length > 0 ? 'online' : 'idle'}
+      action={<Btn onClick={handleRun} disabled={running} color="var(--mint-500)" small>
+        {running ? '⏳' : '▶ Run'}
+      </Btn>}>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {recent.length === 0
+          ? <Empty>No trend reports yet — click Run to research niches</Empty>
+          : recent.map((t, i) => (
+            <div key={i} style={{
+              padding: '10px 12px', background: 'var(--paper-100)',
+              border: '1px solid var(--paper-200)', borderRadius: 'var(--radius-md)',
+            }}>
+              <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--ink-900)', marginBottom: 3 }}>{t.niche}</div>
+              {t.opportunity && (
+                <div style={{ fontSize: 11, color: 'var(--ink-500)', lineHeight: 1.4 }}>{t.opportunity}</div>
+              )}
+              {t.avg_price_usd && (
+                <div style={{ fontSize: 10, color: 'var(--mint-500)', marginTop: 4, fontWeight: 700 }}>
+                  avg ${Number(t.avg_price_usd).toFixed(2)} · {t.signal_count ?? 0} signals
+                </div>
+              )}
+            </div>
+          ))
+        }
+      </div>
+    </Room>
+  )
+}
+
+// ── ARCHIVES review room ──────────────────────────────────────────────────────
+function ArchivesRoom({ queue, onVerdict }) {
+  return (
+    <Room icon="🗄️" name="Archives · Review Queue" accent="var(--rose-500)"
+      status={queue.length > 0 ? 'alert' : 'online'}
+      style={{ gridArea: 'archives' }}>
+
+      {queue.length === 0
+        ? <Empty>Queue clear — no designs awaiting review</Empty>
+        : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {queue.map(d => (
+              <div key={d.id} style={{
+                display: 'flex', gap: 12, alignItems: 'center',
+                padding: '10px 12px', background: 'var(--paper-100)',
+                border: '1px solid var(--paper-200)', borderRadius: 'var(--radius-md)',
+              }}>
+                {d.image_url
+                  ? <img src={d.image_url} alt={d.concept_name} style={{ width: 52, height: 52, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />
+                  : <div style={{ width: 52, height: 52, borderRadius: 8, background: 'var(--paper-200)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>🎨</div>
+                }
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--ink-900)', marginBottom: 1 }}>{d.concept_name}</div>
+                  <div style={{ fontSize: 10, color: 'var(--ink-500)', marginBottom: 6 }}>
+                    {d.niche} · score {((d.forge_score ?? 0) * 100).toFixed(0)}%
+                  </div>
+                  {d.sell_reason && (
+                    <div style={{ fontSize: 10, color: 'var(--ink-400)', marginBottom: 6, fontStyle: 'italic', lineHeight: 1.3 }}>{d.sell_reason}</div>
+                  )}
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <Btn onClick={() => onVerdict(d.id, 'approve')} color="var(--mint-500)" small>✓ Approve</Btn>
+                    <Btn onClick={() => onVerdict(d.id, 'iterate')} color="var(--amber-500)" small>↻ Iterate</Btn>
+                    <Btn onClick={() => onVerdict(d.id, 'reject')} color="var(--coral-500)" small>✕ Reject</Btn>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      }
+    </Room>
+  )
+}
+
+// ── TREASURY cost room ────────────────────────────────────────────────────────
+function TreasuryRoom({ spend }) {
+  const total = spend?.today_usd ?? 0
+  const byAgent = spend?.by_agent ?? {}
+  const limit = 10
+  const pct = Math.min((total / limit) * 100, 100)
+  const barColor = pct > 80 ? 'var(--coral-500)' : pct > 50 ? 'var(--amber-500)' : 'var(--mint-500)'
+  const agents = Object.entries(byAgent).sort((a, b) => b[1] - a[1])
+
+  return (
+    <Room icon="💰" name="Treasury" accent="var(--peach-500)" status="online" style={{ gridArea: 'treasury' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+        {/* Spend today */}
+        <div style={{ textAlign: 'center', padding: '8px 0' }}>
+          <div style={{ fontSize: 'var(--text-3xl)', fontWeight: 800, color: barColor, fontFamily: 'var(--font-mono)', lineHeight: 1 }}>
+            ${Number(total).toFixed(2)}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 4 }}>spent today of ${limit} limit</div>
+          <div style={{ marginTop: 10, height: 6, borderRadius: 3, background: 'var(--paper-200)', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${pct}%`, background: barColor, borderRadius: 3, transition: 'width 0.5s' }} />
+          </div>
+        </div>
+
+        {/* By agent */}
+        {agents.length > 0 && (
+          <div>
+            <Label>By Agent</Label>
+            {agents.map(([agent, cost]) => (
+              <div key={agent} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid var(--paper-200)', fontSize: 12 }}>
+                <span style={{ color: 'var(--ink-700)', fontWeight: 600 }}>{agent}</span>
+                <span style={{ color: 'var(--peach-500)', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
+                  ${Number(cost).toFixed(3)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        {agents.length === 0 && <Empty>No spend recorded today</Empty>}
+      </div>
+    </Room>
+  )
+}
+
+// ── Main BusinessFactory ──────────────────────────────────────────────────────
 export default function BusinessFactory() {
-  const [status, setStatus]     = useState(null)
-  const [summary, setSummary]   = useState(null)
-  const [logItems, setLogItems] = useState([])
-  const [queue, setQueue]       = useState([])
-  const [spend, setSpend]       = useState(null)
-  const [loading, setLoading]   = useState(true)
-  const [paused, setPaused]     = useState(false)
-  const [forgeNiche, setForgeNiche] = useState('minimalist mountain mug')
-  const [runningForge, setRunningForge] = useState(false)
-  const seenLogIds = useRef(new Set())
+  const [status,   setStatus]   = useState(null)
+  const [activity, setActivity] = useState(null)
+  const [queue,    setQueue]    = useState([])
+  const [trends,   setTrends]   = useState(null)
+  const [spend,    setSpend]    = useState(null)
+  const [paused,   setPaused]   = useState(false)
+  const [loading,  setLoading]  = useState(true)
 
   const fetchAll = useCallback(async () => {
-    const [s, sum, sp] = await Promise.all([
+    const [s, act, q, tr, sp] = await Promise.all([
       api.get('/business/status').catch(() => null),
-      api.get('/business/summary').catch(() => null),
+      api.get('/business/activity', { params: { limit: 20 } }).catch(() => null),
+      api.get('/business/forge/queue', { params: { limit: 20 } }).catch(() => null),
+      api.get('/business/nova/trends', { params: { limit: 5 } }).catch(() => null),
       api.get('/business/treasury/spend').catch(() => null),
     ])
     setStatus(s?.data ?? null)
-    setSummary(sum?.data ?? null)
+    setActivity(act?.data ?? null)
+    setQueue(q?.data?.designs ?? [])
+    setTrends(tr?.data ?? null)
     setSpend(sp?.data ?? null)
     setPaused(s?.data?.paused ?? false)
     setLoading(false)
   }, [])
 
-  const fetchLog = useCallback(async () => {
-    const res = await api.get('/business/activity', { params: { limit: 60 } }).catch(() => null)
-    if (!res?.data?.items) return
-    setLogItems(prev => {
-      const newItems = res.data.items.filter(item => {
-        const key = `${item.ts}-${item.summary}`
-        if (seenLogIds.current.has(key)) return false
-        seenLogIds.current.add(key)
-        return true
-      })
-      if (!newItems.length) return prev
-      return [...prev, ...newItems].slice(-200)
-    })
-  }, [])
-
-  const fetchQueue = useCallback(async () => {
-    const res = await api.get('/business/forge/queue', { params: { limit: 10 } }).catch(() => null)
-    setQueue(res?.data?.designs ?? [])
-  }, [])
-
   useEffect(() => {
     fetchAll()
-    fetchLog()
-    fetchQueue()
-    const interval = setInterval(() => {
-      fetchLog()
-      fetchQueue()
-    }, 5000)
-    const slowInterval = setInterval(fetchAll, 30000)
-    return () => { clearInterval(interval); clearInterval(slowInterval) }
-  }, [fetchAll, fetchLog, fetchQueue])
+    const interval = setInterval(fetchAll, 8000)
+    return () => clearInterval(interval)
+  }, [fetchAll])
 
   const togglePause = async () => {
-    const endpoint = paused ? '/business/resume' : '/business/pause'
-    await api.post(endpoint, {}).catch(() => null)
+    await api.post(paused ? '/business/resume' : '/business/pause', {}).catch(() => null)
     setPaused(p => !p)
-    setTimeout(fetchAll, 500)
+  }
+
+  const handleForgeRun = async (niche, nConcepts) => {
+    await api.post('/business/forge/run', { niche, n_concepts: nConcepts }).catch(() => null)
+    setTimeout(fetchAll, 2000)
+  }
+
+  const handleNovaRun = async () => {
+    await api.post('/business/nova/run').catch(() => null)
+    setTimeout(fetchAll, 3000)
   }
 
   const handleVerdict = async (designId, verdict) => {
     await api.post('/business/archives/feedback', {
-      target_kind: 'design',
-      target_id: designId,
-      verdict,
-      notes: '',
+      target_kind: 'design', target_id: designId, verdict, notes: '',
     }).catch(() => null)
     setQueue(q => q.filter(d => d.id !== designId))
   }
 
-  const triggerForge = async () => {
-    if (!forgeNiche.trim()) return
-    setRunningForge(true)
-    await api.post('/business/forge/run', { niche: forgeNiche.trim(), n_concepts: 5 }).catch(() => null)
-    setRunningForge(false)
-    setTimeout(fetchLog, 2000)
-  }
+  const pendingCount = queue.length
+  const spendToday = spend?.today_usd ?? 0
 
   return (
     <RoomShell
@@ -244,93 +446,62 @@ export default function BusinessFactory() {
       actions={
         <>
           <StatusPill status={loading ? 'offline' : paused ? 'paused' : 'online'} />
-          <button
-            onClick={togglePause}
-            disabled={loading}
-            style={{
-              background: paused ? 'rgba(34,211,164,0.1)' : 'rgba(255,178,63,0.1)',
-              border: `1.5px solid ${paused ? 'var(--mint-500)' : 'var(--amber-500)'}`,
-              borderRadius: 'var(--radius-md)',
-              color: paused ? 'var(--mint-500)' : 'var(--amber-500)',
-              fontFamily: 'var(--font-ui)',
-              fontWeight: 700,
-              fontSize: 'var(--text-sm)',
-              padding: '6px 16px',
-              cursor: loading ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {paused ? '▶ Resume' : '⏸ Pause'}
-          </button>
+          {pendingCount > 0 && (
+            <span style={{
+              background: 'rgba(255,107,168,0.15)', border: '1px solid var(--rose-500)',
+              borderRadius: 'var(--radius-full)', color: 'var(--rose-500)',
+              fontWeight: 700, fontSize: 11, padding: '3px 10px',
+            }}>{pendingCount} to review</span>
+          )}
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-500)' }}>
+            ${Number(spendToday).toFixed(2)} today
+          </span>
+          <button onClick={togglePause} disabled={loading} style={{
+            background: paused ? 'rgba(34,211,164,0.1)' : 'rgba(255,178,63,0.1)',
+            border: `1.5px solid ${paused ? 'var(--mint-500)' : 'var(--amber-500)'}`,
+            borderRadius: 'var(--radius-md)',
+            color: paused ? 'var(--mint-500)' : 'var(--amber-500)',
+            fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 'var(--text-sm)',
+            padding: '6px 16px', cursor: loading ? 'not-allowed' : 'pointer',
+          }}>{paused ? '▶ Resume' : '⏸ Pause'}</button>
         </>
       }
     >
-      {/* KPI row */}
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
-        <KpiCard label="Revenue" value={summary?.revenue != null ? `$${Number(summary.revenue).toLocaleString()}` : '—'} sub="all time" accent="var(--violet-500)" icon="💵" />
-        <KpiCard label="Spend Today" value={spend?.today_usd != null ? `$${Number(spend.today_usd).toFixed(2)}` : '—'} sub="LLM + image gen" accent="var(--amber-500)" icon="📊" />
-        <KpiCard label="Review Queue" value={queue.length || '—'} sub="designs pending" accent="var(--rose-500)" icon="🎨" />
-        <KpiCard label="Active Agents" value={status?.active_agents ?? 0} sub="of 5" accent="var(--mint-500)" icon="🤖" />
-      </div>
-
-      {/* Main grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 20, marginBottom: 20 }}>
-        {/* Agent crew */}
-        <div style={{ background: 'var(--paper-50)', border: '1.5px solid var(--ink-300)', borderRadius: 'var(--radius-lg)', padding: 20, boxShadow: 'var(--shadow-sm)' }}>
-          <h3 style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-500)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14 }}>Agent Crew</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {AGENTS.map(agent => {
-              const live = summary?.agents?.find(a => a.name === agent.name)
-              return (
-                <div key={agent.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--paper-100)', borderRadius: 'var(--radius-md)', border: '1px solid var(--paper-200)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 16 }}>{agent.icon}</span>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--ink-900)' }}>{agent.name}</div>
-                      <div style={{ fontSize: 10, color: 'var(--ink-400)' }}>{agent.role}</div>
-                    </div>
-                  </div>
-                  <StatusPill status={live?.status ?? 'offline'} label={live?.status ?? 'offline'} />
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Forge trigger */}
-          <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--paper-200)' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-500)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Trigger Forge</div>
-            <input
-              value={forgeNiche}
-              onChange={e => setForgeNiche(e.target.value)}
-              placeholder="niche..."
-              style={{ width: '100%', boxSizing: 'border-box', padding: '6px 10px', border: '1px solid var(--ink-300)', borderRadius: 'var(--radius-sm)', background: 'var(--paper-100)', color: 'var(--ink-900)', fontFamily: 'var(--font-ui)', fontSize: 12, marginBottom: 8 }}
-            />
-            <button
-              onClick={triggerForge}
-              disabled={runningForge || paused}
-              style={{ width: '100%', padding: '7px', background: 'rgba(139,92,246,0.15)', border: '1.5px solid var(--violet-500)', borderRadius: 'var(--radius-sm)', color: 'var(--violet-500)', fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 12, cursor: runningForge || paused ? 'not-allowed' : 'pointer', opacity: runningForge || paused ? 0.5 : 1 }}
-            >
-              {runningForge ? '⏳ Starting…' : '▶ Run Forge'}
-            </button>
-          </div>
+      {/* Floor plan grid */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '220px 1fr 220px',
+        gridTemplateRows: 'auto auto',
+        gridTemplateAreas: `
+          "ellie forge nova"
+          "archives archives treasury"
+        `,
+        gap: 16,
+      }}>
+        {/* ELLIE */}
+        <div style={{ gridArea: 'ellie' }}>
+          <EllieRoom status={status} activity={activity} />
         </div>
 
-        {/* Live log */}
-        <LogPanel items={logItems} loading={loading} />
-      </div>
+        {/* FORGE */}
+        <ForgeRoom
+          queue={queue}
+          onRun={handleForgeRun}
+          onVerdict={handleVerdict}
+          paused={paused}
+        />
 
-      {/* Design queue */}
-      {queue.length > 0 && (
-        <div style={{ background: 'var(--paper-50)', border: '1.5px solid var(--ink-300)', borderRadius: 'var(--radius-lg)', padding: 20, boxShadow: 'var(--shadow-sm)', marginBottom: 20 }}>
-          <h3 style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-500)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 16 }}>
-            Archives — {queue.length} Design{queue.length !== 1 ? 's' : ''} Awaiting Review
-          </h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {queue.map(design => (
-              <DesignCard key={design.id} design={design} onVerdict={handleVerdict} />
-            ))}
-          </div>
+        {/* NOVA */}
+        <div style={{ gridArea: 'nova' }}>
+          <NovaRoom trends={trends} onRun={handleNovaRun} />
         </div>
-      )}
+
+        {/* ARCHIVES */}
+        <ArchivesRoom queue={queue} onVerdict={handleVerdict} />
+
+        {/* TREASURY */}
+        <TreasuryRoom spend={spend} />
+      </div>
     </RoomShell>
   )
 }
