@@ -22,15 +22,18 @@ def _get_client() -> tuple[OpenAI, str]:
 
 
 def generate_image(prompt: str, size: str = "1024x1024") -> bytes:
+    import httpx as _httpx
     client, model = _get_client()
     response = client.images.generate(
         model=model,
         prompt=prompt,
         n=1,
         size=size,
-        response_format="b64_json",
     )
-    return base64.b64decode(response.data[0].b64_json)
+    item = response.data[0]
+    if getattr(item, "b64_json", None):
+        return base64.b64decode(item.b64_json)
+    return _httpx.get(item.url, timeout=60).content
 
 
 def generate_images(prompts: list[str], size: str = "1024x1024") -> list[bytes]:

@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 
     # ── Image gen ────────────────────────────────────────────────────────────
     openai_api_key: str = ""         # Required for Forge image generation (platform.openai.com)
-    image_gen_model: str = "dall-e-3"  # dall-e-3 (~$0.04/img) or gpt-image-2 (better, pricier)
+    image_gen_model: str = "gpt-image-2"
 
     # ── Supabase ─────────────────────────────────────────────────────────────
     supabase_url: str = ""
