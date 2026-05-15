@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from core.config import settings
+from core.config import get_settings
 from core.scheduler import scheduler
 from agents.nova.researcher import run_all_niches
 from agents.ELLIE.supervisor import hourly_check
@@ -30,7 +30,7 @@ def require_auth(authorization: str | None = Header(default=None)) -> None:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing bearer token")
     token = authorization.removeprefix("Bearer ").strip()
-    if token != settings.auth_token:
+    if token != get_settings().auth_token:
         raise HTTPException(status_code=401, detail="Bad bearer token")
 
 

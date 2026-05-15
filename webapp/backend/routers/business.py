@@ -144,6 +144,14 @@ async def forge_run(request: Request):
         raise HTTPException(status_code=502, detail=str(e))
 
 
+@router.get("/forge/progress")
+async def forge_progress():
+    try:
+        return await _get("/forge/progress")
+    except Exception as e:
+        return {"running": False, "step": "idle", "detail": "", "pct": 0, "error": str(e)}
+
+
 @router.get("/forge/queue")
 async def forge_queue(limit: int = 20):
     try:

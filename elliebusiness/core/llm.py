@@ -49,7 +49,9 @@ def complete(prompt: str, system: str = "", fast: bool = False, json_mode: bool 
     messages.append({"role": "user", "content": prompt})
 
     kwargs: dict = {"model": model, "messages": messages, "max_tokens": 2000}
-    if json_mode:
+    # json_object response_format only works on some OpenAI models; Claude/Gemini ignore or
+    # error on it — we rely on the system prompt instruction instead.
+    if json_mode and "openai/" in model:
         kwargs["response_format"] = {"type": "json_object"}
 
     resp = client.chat.completions.create(**kwargs)

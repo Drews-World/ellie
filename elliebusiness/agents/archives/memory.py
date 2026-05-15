@@ -29,7 +29,7 @@ def record_feedback(
         "verdict": verdict,
         "notes": notes,
         "drew_tags": drew_tags or [],
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "occurred_at": datetime.now(timezone.utc).isoformat(),
     }
     result = db.table("feedback_events").insert(row).execute()
 
@@ -40,7 +40,7 @@ def record_feedback(
             "reject": "rejected",
             "iterate": "needs_revision",
         }
-        db.table("designs").update({"drew_verdict": verdict, "status": status_map.get(verdict, verdict)}).eq("id", target_id).execute()
+        db.table("designs").update({"status": status_map.get(verdict, verdict)}).eq("id", target_id).execute()
 
     return result.data[0] if result.data else row
 

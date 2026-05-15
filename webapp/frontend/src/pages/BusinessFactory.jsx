@@ -123,18 +123,43 @@ const FORGE_PRESETS = [
   { label: 'Logo Concept',  prompt: 'minimal outdoor brand logo concept, mountain peak, simple geometric', n: 3 },
 ]
 
-function ForgeRoom({ queue, onRun, onVerdict, paused }) {
+function ForgeRoom({ queue, onRun, onVerdict, onRefresh, paused }) {
   const [niche, setNiche] = useState('')
   const [nConcepts, setNConcepts] = useState(5)
   const [running, setRunning] = useState(false)
+  const [progress, setProgress] = useState(null)
+  const pollRef = useRef(null)
+
+  const stopPolling = () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+  }
+
+  const startPolling = () => {
+    stopPolling()
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await api.get('/business/forge/progress')
+        const p = res.data
+        setProgress(p)
+        if (!p.running) {
+          stopPolling()
+          setRunning(false)
+          if (p.step === 'done') onRefresh()
+        }
+      } catch { stopPolling(); setRunning(false) }
+    }, 1500)
+  }
+
+  useEffect(() => () => stopPolling(), [])
 
   const agentStatus = running ? 'online' : queue.length > 0 ? 'online' : 'idle'
 
   const handleRun = async () => {
     if (!niche.trim()) return
     setRunning(true)
+    setProgress({ running: true, step: 'starting', detail: 'Kicking off Forge…', pct: 0 })
     await onRun(niche.trim(), nConcepts)
-    setRunning(false)
+    startPolling()
   }
 
   const applyPreset = (p) => {
@@ -202,6 +227,28 @@ function ForgeRoom({ queue, onRun, onVerdict, paused }) {
             </Btn>
           </div>
         </div>
+
+        {/* Progress bar */}
+        {progress && (progress.running || progress.step === 'done' || progress.step === 'error') && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: progress.step === 'error' ? 'var(--coral-500)' : 'var(--amber-500)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                {progress.step === 'done' ? '✓ Done' : progress.step === 'error' ? '✕ Error' : `⚙ ${progress.step}`}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--ink-400)', fontFamily: 'var(--font-mono)' }}>{progress.pct}%</span>
+            </div>
+            <div style={{ height: 6, background: 'var(--paper-200)', borderRadius: 99, overflow: 'hidden' }}>
+              <div style={{
+                height: '100%',
+                width: `${progress.pct}%`,
+                background: progress.step === 'error' ? 'var(--coral-500)' : progress.step === 'done' ? 'var(--mint-500)' : 'var(--amber-500)',
+                borderRadius: 99,
+                transition: 'width 0.4s ease',
+              }} />
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--ink-500)', lineHeight: 1.4 }}>{progress.detail}</div>
+          </div>
+        )}
 
         {/* Design queue */}
         <div>
@@ -488,6 +535,7 @@ export default function BusinessFactory() {
           queue={queue}
           onRun={handleForgeRun}
           onVerdict={handleVerdict}
+          onRefresh={fetchAll}
           paused={paused}
         />
 

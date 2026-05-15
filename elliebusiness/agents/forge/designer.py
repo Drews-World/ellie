@@ -14,16 +14,28 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid
 from datetime import datetime, timezone
 
+from core.config import get_settings
 from core.llm import complete
 from core.supabase_client import get_db
 from .prompts import FORGE_SYSTEM, CONCEPT_PROMPT, SCORE_PROMPT, SCORE_SYSTEM
 
 logger = logging.getLogger(__name__)
 
-SCORE_THRESHOLD = 0.60  # Discard designs scoring below this overall
+SCORE_THRESHOLD = 0.30
+
+
+def _parse_json(raw: str) -> dict:
+    """Parse JSON from LLM output, tolerating markdown code fences."""
+    raw = raw.strip()
+    # Strip ```json ... ``` or ``` ... ``` fences
+    fenced = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw)
+    if fenced:
+        raw = fenced.group(1).strip()
+    return json.loads(raw)  # Discard designs scoring below this overall
 
 
 def _get_style_memory(niche: str) -> str:
@@ -88,7 +100,7 @@ def generate_concepts(niche: str, n: int = 5) -> list[dict]:
 
     try:
         raw = complete(prompt, system=FORGE_SYSTEM, fast=False, json_mode=True)
-        data = json.loads(raw)
+        data = _parse_json(raw)
         return data.get("concepts", [])
     except Exception as e:
         logger.error(f"Forge: concept generation failed: {e}")
@@ -105,7 +117,7 @@ def score_concept(concept: dict, niche: str) -> float:
     )
     try:
         raw = complete(prompt, system=SCORE_SYSTEM, fast=True, json_mode=True)
-        scores = json.loads(raw)
+        scores = _parse_json(raw)
         return float(scores.get("overall", 0.5))
     except Exception:
         return 0.5
@@ -139,12 +151,13 @@ def _save_design(niche: str, concept: dict, score: float, image_url: str = "") -
         db.table("designs").insert({
             "id": design_id,
             "niche": niche,
-            "prompt": concept.get("image_prompt", ""),
+            "concept_name": concept.get("name", "Untitled"),
+            "image_prompt": concept.get("image_prompt", ""),
+            "sell_reason": concept.get("sell_reason", ""),
+            "products": concept.get("products", ["mug"]),
             "image_url": image_url,
             "forge_score": score,
             "status": "pending_drew_review",
-            "model": "gpt-image-2",
-            "created_at": datetime.now(timezone.utc).isoformat(),
         }).execute()
     except Exception as e:
         logger.warning(f"Forge: DB save failed: {e}")
@@ -152,23 +165,43 @@ def _save_design(niche: str, concept: dict, score: float, image_url: str = "") -
 
 
 def _upload_image_to_storage(design_id: str, image_bytes: bytes) -> str:
-    """Upload PNG to Supabase Storage. Returns public URL."""
+    """Upload PNG to Supabase Storage via REST API. Returns public URL."""
+    import httpx
+    s = get_settings()
+    path = f"{design_id}.png"
+    url = f"{s.supabase_url}/storage/v1/object/designs/{path}"
     try:
-        db = get_db()
-        path = f"designs/{design_id}.png"
-        db.storage.from_("designs").upload(path, image_bytes, {"content-type": "image/png"})
-        return db.storage.from_("designs").get_public_url(path)
+        resp = httpx.put(
+            url,
+            content=image_bytes,
+            headers={
+                "Authorization": f"Bearer {s.supabase_service_key}",
+                "Content-Type": "image/png",
+            },
+            timeout=60,
+        )
+        resp.raise_for_status()
+        public_url = f"{s.supabase_url}/storage/v1/object/public/designs/{path}"
+        logger.info(f"Forge: uploaded {path} → {public_url}")
+        return public_url
     except Exception as e:
-        logger.warning(f"Forge: storage upload failed: {e}")
+        logger.warning(f"Forge: storage upload failed for {path}: {e}")
         return ""
 
 
-def run_forge(niche: str, n_concepts: int = 5) -> list[dict]:
+def run_forge(niche: str, n_concepts: int = 5, progress_cb=None) -> list[dict]:
     """
     Full Forge run for one niche.
     Returns list of designs that passed scoring, saved to DB pending Drew review.
+    progress_cb(step, detail, pct) is called at each stage if provided.
     """
+    def _progress(step: str, detail: str, pct: int) -> None:
+        if progress_cb:
+            progress_cb(step, detail, pct)
+        logger.info(f"Forge [{pct}%] {step}: {detail}")
+
     logger.info(f"Forge: starting run for niche='{niche}', n={n_concepts}")
+    _progress("concepts", f"Generating {n_concepts} design concepts for '{niche}'…", 5)
 
     # Steps 1-3: Generate concepts
     concepts = generate_concepts(niche, n=n_concepts)
@@ -176,18 +209,36 @@ def run_forge(niche: str, n_concepts: int = 5) -> list[dict]:
         logger.error("Forge: no concepts generated, aborting")
         return []
 
-    # Step 4: Generate images
-    concepts_with_images = generate_images_for_concepts(concepts)
+    _progress("imaging", f"Got {len(concepts)} concepts — generating images…", 25)
+
+    # Step 4: Generate images (report per-image progress)
+    concepts_with_images = []
+    for i, concept in enumerate(concepts):
+        pct = 25 + int((i / len(concepts)) * 40)
+        _progress("imaging", f"Image {i + 1}/{len(concepts)}: {concept['name']}", pct)
+        try:
+            from core.image_gen import generate_image
+            image_bytes = generate_image(concept["image_prompt"])
+            concepts_with_images.append({**concept, "image_bytes": image_bytes})
+        except Exception as e:
+            logger.warning(f"Forge: image gen skipped for '{concept['name']}': {e}")
+            concepts_with_images.append({**concept, "image_bytes": None})
+
+    _progress("scoring", "Scoring designs…", 65)
 
     # Step 5-6: Score and filter
     results = []
-    for concept in concepts_with_images:
+    for i, concept in enumerate(concepts_with_images):
+        pct = 65 + int((i / len(concepts_with_images)) * 20)
+        _progress("scoring", f"Scoring {i + 1}/{len(concepts_with_images)}: {concept['name']}", pct)
         score = score_concept(concept, niche)
         logger.info(f"Forge: '{concept['name']}' scored {score:.2f}")
 
         if score < SCORE_THRESHOLD:
             logger.info(f"Forge: discarding '{concept['name']}' (score {score:.2f} < {SCORE_THRESHOLD})")
             continue
+
+        _progress("saving", f"Saving '{concept['name']}' to review queue…", 85)
 
         # Step 7: Save to DB
         image_url = ""
