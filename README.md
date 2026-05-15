@@ -1,4 +1,5 @@
-# ELLIE Hub
+# ELLIE Hub 
+### Executive Life Logic Intelligence Engine
 
 > Drew's personal command center. A **web app** that's the hub for ELLIE's growing crew: ellietrading, elliebusiness, and Drew's own life. Navigate it like an open office — pick a door, enter a room.
 
