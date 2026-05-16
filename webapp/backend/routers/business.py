@@ -9,7 +9,7 @@ from core.config import get_settings
 
 router = APIRouter(prefix="/business", tags=["business"])
 
-TIMEOUT = 30  # seconds — forge runs can take a bit
+TIMEOUT = 120  # seconds — LLM calls (ELLIE command, strategy) can take 60-90s
 
 
 def _headers() -> dict:
@@ -39,6 +39,12 @@ async def _post(path: str, body: dict | None = None):
 
 
 # ── Sub-system contract ───────────────────────────────────────────────────────
+
+@router.get("")
+@router.get("/")
+async def business_root():
+    return {"ok": True, "service": "business"}
+
 
 @router.get("/health")
 async def business_health():
@@ -134,6 +140,30 @@ async def ellie_pipeline():
         return {"running": False, "step": "idle", "detail": "", "pct": 0, "error": str(e)}
 
 
+@router.get("/ellie/pipeline/runs")
+async def ellie_pipeline_runs(limit: int = 20):
+    try:
+        return await _get("/ellie/pipeline/runs", params={"limit": limit})
+    except Exception as e:
+        return {"runs": [], "error": str(e)}
+
+
+@router.get("/ellie/pipeline/runs/{run_id}")
+async def ellie_pipeline_run_detail(run_id: str):
+    try:
+        return await _get(f"/ellie/pipeline/runs/{run_id}")
+    except Exception as e:
+        return {"run": None, "designs": [], "activity": [], "error": str(e)}
+
+
+@router.post("/ellie/pipeline/runs/{run_id}/rerun")
+async def ellie_pipeline_rerun(run_id: str):
+    try:
+        return await _post(f"/ellie/pipeline/runs/{run_id}/rerun")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
 # ── Strategy ─────────────────────────────────────────────────────────────────
 
 @router.get("/strategy/report")
@@ -224,11 +254,63 @@ async def archives_pending(limit: int = 20):
         return {"designs": [], "count": 0, "error": str(e)}
 
 
+@router.get("/archives/publish_progress")
+async def archives_publish_progress():
+    try:
+        return await _get("/archives/publish_progress")
+    except Exception as e:
+        return {"running": False, "step": "idle", "error": str(e)}
+
+
+@router.post("/archives/publish_all")
+async def archives_publish_all():
+    try:
+        return await _post("/archives/publish_all")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
 @router.post("/archives/feedback")
 async def archives_feedback(request: Request):
     try:
         body = await request.json()
         return await _post("/archives/feedback", body)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+# ── Product Maker ─────────────────────────────────────────────────────────────
+
+@router.get("/products/catalog")
+async def products_catalog():
+    try:
+        return await _get("/products/catalog")
+    except Exception as e:
+        return {"products": [], "error": str(e)}
+
+
+@router.get("/products/designs")
+async def products_designs(limit: int = 40):
+    try:
+        return await _get("/products/designs", params={"limit": limit})
+    except Exception as e:
+        return {"designs": [], "error": str(e)}
+
+
+@router.post("/products/generate_copy")
+async def products_generate_copy(request: Request):
+    try:
+        body = await request.json()
+        return await _post("/products/generate_copy", body)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.post("/products/create_draft")
+async def products_create_draft(request: Request):
+    try:
+        body = await request.json()
+        return await _post("/products/create_draft", body)
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
 

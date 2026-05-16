@@ -33,34 +33,53 @@ class ListingSignal:
 
 # ── Tier 1: Etsy public API ───────────────────────────────────────────────────
 
+def _parse_price(price_obj: dict) -> float:
+    """Convert Etsy price object → float USD."""
+    amount = float(price_obj.get("amount", 0))
+    divisor = float(price_obj.get("divisor", 100)) or 100
+    return amount / divisor
+
+
 def _api_scrape(niche: str, limit: int) -> list[ListingSignal]:
     s = get_settings()
     if not s.etsy_api_key:
         return []
+    headers = {"x-api-key": f"{s.etsy_api_key}:{s.etsy_shared_secret}"}
+    if s.etsy_access_token:
+        headers["Authorization"] = f"Bearer {s.etsy_access_token}"
     try:
         r = httpx.get(
-            "https://openapi.etsy.com/v3/application/listings/active",
-            headers={"x-api-key": s.etsy_api_key},
-            params={"keywords": niche, "limit": min(limit, 100), "sort_on": "score", "sort_order": "desc"},
-            timeout=15,
+            "https://api.etsy.com/v3/application/listings/active",
+            headers=headers,
+            params={
+                "keywords": niche,
+                "limit": min(limit, 100),
+                "sort_on": "score",
+                "sort_order": "desc",
+            },
+            timeout=20,
         )
-        r.raise_for_status()
-        results = r.json().get("results", [])
-        return [
-            ListingSignal(
-                listing_id=item["listing_id"],
+        if r.status_code != 200:
+            logger.warning(f"Nova: Etsy API {r.status_code} — {r.text[:300]}")
+            r.raise_for_status()
+        data = r.json()
+        results = data.get("results", [])
+        signals = []
+        for item in results:
+            price_obj = item.get("price") or {}
+            signals.append(ListingSignal(
+                listing_id=int(item.get("listing_id", 0)),
                 title=item.get("title", ""),
-                price_usd=float(item.get("price", {}).get("amount", 0)) / 100,
-                tags=item.get("tags", []),
-                review_count=item.get("num_favorers", 0),
-                views=item.get("views", 0),
+                price_usd=_parse_price(price_obj),
+                tags=item.get("tags") or [],
+                review_count=int(item.get("num_favorers", 0)),
+                views=int(item.get("views", 0)),
                 url=item.get("url", ""),
-                image_url=(item.get("MainImage") or {}).get("url_570xN", ""),
-            )
-            for item in results
-        ]
+            ))
+        logger.info(f"Nova: Etsy API returned {len(signals)} listings for '{niche}'")
+        return signals
     except Exception as e:
-        logger.debug(f"Nova: API scrape failed: {e}")
+        logger.warning(f"Nova: Etsy API scrape failed: {e}")
         return []
 
 

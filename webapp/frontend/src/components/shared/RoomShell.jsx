@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import PixelLabel from './PixelLabel'
 
-export default function RoomShell({ title, gradient, icon, children, actions }) {
+export default function RoomShell({ title, gradient, icon, children, actions, contentStyle = {} }) {
   const navigate = useNavigate()
   return (
     <div style={{ minHeight: '100%', background: 'var(--grad-room-bg)', display: 'flex', flexDirection: 'column' }}>
@@ -46,7 +46,7 @@ export default function RoomShell({ title, gradient, icon, children, actions }) 
       </div>
 
       {/* Room content */}
-      <div style={{ flex: 1, padding: '32px', overflow: 'auto' }}>
+      <div style={{ flex: 1, padding: '32px', overflow: 'auto', ...contentStyle }}>
         {children}
       </div>
     </div>

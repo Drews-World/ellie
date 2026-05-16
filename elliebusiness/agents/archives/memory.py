@@ -41,6 +41,13 @@ def record_feedback(
             "iterate": "needs_revision",
         }
         db.table("designs").update({"status": status_map.get(verdict, verdict)}).eq("id", target_id).execute()
+        try:
+            from core.activity import log as alog
+            action_label = {"approve": "approved", "reject": "rejected", "iterate": "revision requested"}.get(verdict, verdict)
+            note_part = f" — {notes}" if notes else ""
+            alog("archives", f"design_{verdict}", f"Design {target_id[:8]}: {action_label}{note_part}")
+        except Exception:
+            pass
 
     return result.data[0] if result.data else row
 

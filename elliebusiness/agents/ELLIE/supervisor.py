@@ -69,15 +69,16 @@ def resume_all() -> None:
     logger.info("ELLIE: resumed all agents")
 
 
-def _notify(message: str) -> None:
-    """Queue a notification for Hub and fire Discord alert."""
+def _notify(message: str, discord: bool = False) -> None:
+    """Queue a notification for Hub. Only pings Discord when discord=True."""
     _supervisor_state["notifications"].append({
         "ts": datetime.now(timezone.utc).isoformat(),
         "message": message,
     })
     _supervisor_state["notifications"] = _supervisor_state["notifications"][-20:]
     logger.info(f"ELLIE notification: {message}")
-    _discord(f"**ELLIE** · {message}")
+    if discord:
+        _discord(f"**ELLIE** · {message}")
 
 
 def hourly_check() -> None:
@@ -91,15 +92,15 @@ def hourly_check() -> None:
     # 1. Cost limit check
     if is_over_limit():
         pause_all(reason=f"Daily spend limit hit (${today_spend():.2f})")
-        _notify(f"⚠️ Cost limit hit: ${today_spend():.2f} today. Crew paused — check Treasury.")
+        _notify(f"⚠️ Cost limit hit: ${today_spend():.2f} today. Crew paused — check Treasury.", discord=True)
         return
 
-    # 2. Archives backlog
+    # 2. Archives backlog — hub only, no Discord spam
     pending = count_pending()
     if pending > 20:
-        _notify(f"📬 Archives backlog: {pending} designs waiting for your review. Take 10 min to clear the queue.")
+        _notify(f"📬 Archives backlog: {pending} designs waiting for your review.")
 
-    # 3. Agent idle checks
+    # 3. Agent idle checks — hub only, no Discord spam
     now = datetime.now(timezone.utc)
     for agent, threshold in IDLE_THRESHOLDS.items():
         last_run_key = f"last_{agent}_run"

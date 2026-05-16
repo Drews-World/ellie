@@ -17,7 +17,7 @@ from core.config import get_settings
 from core.scheduler import scheduler
 from agents.nova.researcher import run_all_niches
 from agents.ELLIE.supervisor import hourly_check
-from routers import status, nova, forge, archives, treasury, ellie_cmd, strategy
+from routers import status, nova, forge, archives, treasury, ellie_cmd, strategy, products
 
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
@@ -76,3 +76,4 @@ app.include_router(archives.router)        # /archives/*
 app.include_router(treasury.router)        # /treasury/*
 app.include_router(ellie_cmd.router)       # /ellie/command /ellie/confirm /ellie/pipeline
 app.include_router(strategy.router)        # /strategy/report /strategy/latest
+app.include_router(products.router)        # /products/catalog /products/designs /products/generate_copy /products/create_draft

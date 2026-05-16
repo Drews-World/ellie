@@ -165,12 +165,12 @@ def generate_images_for_concepts(concepts: list[dict]) -> list[dict]:
     return enriched
 
 
-def _save_design(niche: str, concept: dict, score: float, image_url: str = "") -> str:
+def _save_design(niche: str, concept: dict, score: float, image_url: str = "", run_id: str | None = None) -> str:
     """Persist design to Supabase. Returns design ID."""
     design_id = str(uuid.uuid4())
     try:
         db = get_db()
-        db.table("designs").insert({
+        row: dict = {
             "id": design_id,
             "niche": niche,
             "concept_name": concept.get("name", "Untitled"),
@@ -180,7 +180,10 @@ def _save_design(niche: str, concept: dict, score: float, image_url: str = "") -
             "image_url": image_url,
             "forge_score": score,
             "status": "pending_drew_review",
-        }).execute()
+        }
+        if run_id:
+            row["run_id"] = run_id
+        db.table("designs").insert(row).execute()
     except Exception as e:
         logger.warning(f"Forge: DB save failed: {e}")
     return design_id
@@ -211,12 +214,14 @@ def _upload_image_to_storage(design_id: str, image_bytes: bytes) -> str:
         return ""
 
 
-def run_forge(niche: str, n_concepts: int = 5, products: list[str] | None = None, progress_cb=None) -> list[dict]:
+def run_forge(niche: str, n_concepts: int = 5, products: list[str] | None = None, progress_cb=None, run_id: str | None = None) -> list[dict]:
     """
     Full Forge run for one niche.
     Returns list of designs that passed scoring, saved to DB pending Drew review.
     progress_cb(step, detail, pct) is called at each stage if provided.
     """
+    from core.activity import log as alog
+
     def _progress(step: str, detail: str, pct: int) -> None:
         if progress_cb:
             progress_cb(step, detail, pct)
@@ -227,6 +232,7 @@ def run_forge(niche: str, n_concepts: int = 5, products: list[str] | None = None
         products = _get_recommended_products(niche)
 
     logger.info(f"Forge: starting run for niche='{niche}', n={n_concepts}, products={products}")
+    alog("forge", "forge_started", f"Forge starting: {n_concepts} concepts for '{niche}'", run_id=run_id)
     _progress("concepts", f"Generating {n_concepts} design concepts for '{niche}'…", 5)
 
     # Steps 1-3: Generate concepts
@@ -244,7 +250,10 @@ def run_forge(niche: str, n_concepts: int = 5, products: list[str] | None = None
         _progress("imaging", f"Image {i + 1}/{len(concepts)}: {concept['name']}", pct)
         try:
             from core.image_gen import generate_image
-            image_bytes = generate_image(concept["image_prompt"])
+            from integrations.printify import preferred_image_size_for_products
+            concept_products = concept.get("products") or products or []
+            img_size = preferred_image_size_for_products(concept_products) if concept_products else "1024x1024"
+            image_bytes = generate_image(concept["image_prompt"], size=img_size)
             concepts_with_images.append({**concept, "image_bytes": image_bytes})
         except Exception as e:
             logger.warning(f"Forge: image gen skipped for '{concept['name']}': {e}")
@@ -271,9 +280,14 @@ def run_forge(niche: str, n_concepts: int = 5, products: list[str] | None = None
         if concept.get("image_bytes"):
             design_id = str(uuid.uuid4())
             image_url = _upload_image_to_storage(design_id, concept["image_bytes"])
-            design_id = _save_design(niche, concept, score, image_url)
+            design_id = _save_design(niche, concept, score, image_url, run_id=run_id)
         else:
-            design_id = _save_design(niche, concept, score)
+            design_id = _save_design(niche, concept, score, run_id=run_id)
+
+        alog("forge", "design_created",
+             f"Design ready: '{concept['name']}' — score {score:.0%}",
+             metadata={"design_id": design_id, "score": score},
+             run_id=run_id)
 
         results.append({
             "design_id": design_id,
@@ -286,4 +300,7 @@ def run_forge(niche: str, n_concepts: int = 5, products: list[str] | None = None
         })
 
     logger.info(f"Forge: {len(results)}/{len(concepts)} designs passed scoring for '{niche}'")
+    alog("forge", "forge_complete",
+         f"Forge done for '{niche}': {len(results)}/{len(concepts)} designs passed review",
+         run_id=run_id)
     return results

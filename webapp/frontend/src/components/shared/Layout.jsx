@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '@clerk/clerk-react'
 import Header from './Header'
 import Sidebar from './Sidebar'
@@ -10,6 +10,7 @@ import styles from './Layout.module.css'
 
 export default function Layout() {
   const { getToken } = useAuth()
+  const location = useLocation()
 
   // IoT: sync ELLIE avatar state → Govee lights (best-effort, silently ignores errors)
   useGoveeSync(true)
@@ -44,7 +45,7 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
-      <EllieChat />
+      {!location.pathname.startsWith('/business') && <EllieChat />}
     </div>
   )
 }

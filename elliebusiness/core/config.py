@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     etsy_api_key: str = ""           # Keystring — read-only (Nova)
     etsy_shared_secret: str = ""     # OAuth secret — needed for writing (Forge)
     etsy_access_token: str = ""      # OAuth access token after auth flow
+    etsy_refresh_token: str = ""     # OAuth refresh token
     etsy_shop_id: str = ""           # Your Etsy shop ID
 
     # ── Printify ─────────────────────────────────────────────────────────────

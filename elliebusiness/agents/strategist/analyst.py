@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 CATALOG_PRODUCTS = [
     "t-shirt", "hoodie", "mug", "mug_15oz",
     "tote bag", "poster", "pillow",
+    "sticker", "baby_bodysuit", "canvas", "framed_poster", "notebook",
 ]
 
 ANALYST_SYSTEM = """You are the Strategist, a product planning agent for a Printify/Etsy print-on-demand business.

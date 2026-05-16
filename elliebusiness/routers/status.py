@@ -63,6 +63,7 @@ class ActivityItem(BaseModel):
     ts: str
     kind: str
     summary: str
+    agent: str = ""
 
 
 class Activity(BaseModel):
@@ -142,12 +143,26 @@ def summary(period: Literal["daily", "weekly"] = Query("daily")) -> dict:
 
 
 @router.get("/activity", response_model=Activity)
-def activity(limit: int = Query(20, ge=1, le=100)) -> Activity:
-    snapshot = build_status_snapshot()
-    items = [
-        ActivityItem(ts=n["ts"], kind="notification", summary=n["message"])
-        for n in snapshot.get("notifications", [])[-limit:]
-    ]
+def activity(limit: int = Query(40, ge=1, le=200)) -> Activity:
+    from core.activity import get_recent
+    rows = get_recent(limit=limit)
+    if rows:
+        items = [
+            ActivityItem(
+                ts=r.get("occurred_at", ""),
+                kind=r.get("event_type", "info"),
+                summary=r.get("message", ""),
+                agent=r.get("agent", ""),
+            )
+            for r in rows
+        ]
+    else:
+        # Fallback to in-memory notifications if DB not yet populated
+        snapshot = build_status_snapshot()
+        items = [
+            ActivityItem(ts=n["ts"], kind="notification", summary=n["message"], agent="ellie")
+            for n in snapshot.get("notifications", [])[-limit:]
+        ]
     return Activity(items=items)
 
 
