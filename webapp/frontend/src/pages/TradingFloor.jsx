@@ -55,9 +55,18 @@ const WALK_ANIMS = {
     'north-west': '14eb6f04-8457-4cfa-821d-ad02d777ae49',
     'south-west': '949b7939-c411-48bc-93f3-766968a131fa',
   },
-  trader: null,  // generating — will be filled when animations complete
-  risk:   null,  // queued after trader finishes
-  bull:   null,  // queued after risk finishes
+  trader: {
+    'south':      'd00aa584-2092-4d74-9fe3-9759627fb4d5',
+    'east':       '846ed460-64f2-4982-b26e-59a481003e50',
+    'north':      '5241d39f-e631-4972-9665-b6e4f830279e',
+    'west':       'cb8e1b65-b784-4e5d-a6af-c0627c9ec953',
+    'south-east': '96a4be11-016f-4b4c-8c3b-c03806d4d657',
+    'north-east': 'be75d1b2-a8fe-40f7-9fb5-b407bfb3163b',
+    'north-west': '9b784b7a-f705-4fff-8e3f-f0b0b6bd73fe',
+    'south-west': 'a4e025b9-63d1-4bd3-9647-1bdd35c1726e',
+  },
+  risk: null,   // generating now
+  bull: null,   // queued after risk finishes
 }
 
 function mkSprite(key, opts) {
