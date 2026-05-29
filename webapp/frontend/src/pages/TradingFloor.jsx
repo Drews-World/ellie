@@ -65,8 +65,17 @@ const WALK_ANIMS = {
     'north-west': '9b784b7a-f705-4fff-8e3f-f0b0b6bd73fe',
     'south-west': 'a4e025b9-63d1-4bd3-9647-1bdd35c1726e',
   },
-  risk: null,   // generating now
-  bull: null,   // queued after risk finishes
+  risk: {
+    'south':      '9447c3d9-165c-4858-85ec-ea86b75f21f8',
+    'east':       '534ccc48-173a-4a47-baaa-cb35805c556b',
+    'north':      '0bcd67c9-928d-4014-a5e8-3ceada23c319',
+    'west':       'f8795c5a-8391-4573-a92d-65e982adefb0',
+    'south-east': '59d132c1-0964-4669-983c-089e88512f51',
+    'north-east': '24c621f8-5ac1-440f-b6c9-7215c7064a39',
+    'north-west': 'd687fabe-9402-420d-85af-a8dd6846e317',
+    'south-west': '8af7958f-3728-4f31-9e5c-20fb92a4a0fa',
+  },
+  bull: null,   // queued 2026-05-29 — ~2-4 min, wire UUIDs when get_character returns completed
 }
 
 function mkSprite(key, opts) {
@@ -183,182 +192,43 @@ const timeAgo = ts => {
   return `${Math.floor(d/3600000)}h ago`
 }
 
-// ── SVG: Wires and vines ──────────────────────────────────────────────────────
-// viewBox "0 0 100 100" preserveAspectRatio=none — coords are map %
-function WiresAndVines() {
+// ── Map decorations — Pixellab pixel-art vines & wires ───────────────────────
+const _VINE_X  = ['3%', '20%', '32%', '68%', '80%', '97%']
+const _WIRE_X  = ['12%', '26%', '50%', '74%', '88%']
+
+function MapDecor() {
   return (
-    <svg viewBox="0 0 100 100" preserveAspectRatio="none"
-      style={{ position:'absolute', inset:0, width:'100%', height:'100%', pointerEvents:'none', zIndex:5 }}>
+    <>
+      {/* Dark ceiling surface — gradient from top, reveals floor below */}
+      <div style={{ position:'absolute', top:0, left:0, right:0, height:'24%',
+        zIndex:3, pointerEvents:'none',
+        background:'linear-gradient(180deg,rgba(1,2,10,0.98) 0%,rgba(3,5,16,0.88) 55%,rgba(3,5,16,0) 100%)' }} />
 
-      {/* ══ WIRE BUNDLES — draping from ceiling ══════════════════════════════ */}
-      {/* Amber power conduit — left cluster */}
-      <path d="M 14 0 C 13 5, 15 12, 14 20 C 13 28, 15 35, 14 42"
-        stroke="rgba(255,180,0,0.75)" strokeWidth="1.4" fill="none"
-        strokeDasharray="80" style={{ animation:'tf-wire-flow 4s linear infinite' }} />
-      <path d="M 15.5 0 C 15 5, 16 12, 15.5 20 C 15 28, 16 35, 15.5 42"
-        stroke="rgba(255,220,80,0.45)" strokeWidth="0.7" fill="none" />
-      {/* Blue data cable — left */}
-      <path d="M 24 0 C 25 6, 23 14, 24 22 C 25 30, 23 38, 24 48"
-        stroke="rgba(72,187,255,0.7)" strokeWidth="1.2" fill="none"
-        strokeDasharray="60" style={{ animation:'tf-wire-flow 5s linear infinite reverse' }} />
-      <path d="M 25.5 0 C 26 6, 25 14, 25.5 22"
-        stroke="rgba(120,210,255,0.4)" strokeWidth="0.6" fill="none" />
-
-      {/* Purple data conduit — center-left */}
-      <path d="M 38 0 L 38 8 C 38 14, 36 20, 35 26 C 34 32, 36 38, 35 46"
-        stroke="rgba(155,114,255,0.65)" strokeWidth="1.3" fill="none"
-        strokeDasharray="70" style={{ animation:'tf-wire-flow 6s linear infinite' }} />
-
-      {/* Amber spine — center (main power) */}
-      <path d="M 50 0 L 50 10 C 50 16, 50 22, 50 30 C 50 38, 50 44, 50 52"
-        stroke="rgba(255,180,0,0.8)" strokeWidth="1.8" fill="none"
-        strokeDasharray="100" style={{ animation:'tf-wire-flow 3s linear infinite' }} />
-      <path d="M 51.5 0 L 51.5 10 C 51.5 16, 51.5 22, 51.5 30"
-        stroke="rgba(255,220,100,0.4)" strokeWidth="0.8" fill="none" />
-
-      {/* Teal cable — center-right */}
-      <path d="M 62 0 L 62 8 C 62 14, 64 20, 65 26 C 66 32, 64 38, 65 46"
-        stroke="rgba(34,211,164,0.65)" strokeWidth="1.3" fill="none"
-        strokeDasharray="70" style={{ animation:'tf-wire-flow 5.5s linear infinite reverse' }} />
-
-      {/* Blue + amber — right cluster */}
-      <path d="M 75 0 C 76 6, 74 14, 76 22 C 77 30, 75 38, 76 46"
-        stroke="rgba(72,187,255,0.7)" strokeWidth="1.2" fill="none"
-        strokeDasharray="60" style={{ animation:'tf-wire-flow 4.5s linear infinite' }} />
-      <path d="M 86 0 C 85 5, 87 12, 86 20 C 85 28, 87 35, 86 42"
-        stroke="rgba(255,180,0,0.7)" strokeWidth="1.3" fill="none"
-        strokeDasharray="80" style={{ animation:'tf-wire-flow 3.5s linear infinite reverse' }} />
-      <path d="M 87.5 0 C 87 5, 88 12, 87.5 20 C 87 28, 88 35, 87.5 42"
-        stroke="rgba(255,220,80,0.35)" strokeWidth="0.6" fill="none" />
-
-      {/* ══ ORGANIC VINES — hanging from ceiling ═════════════════════════════ */}
-      {/* Vine 1 — far left wall */}
-      <path d="M 3 0 C 2 7, 4 15, 3 24 C 2 33, 4 42, 3 55 C 2 64, 4 72, 3 82"
-        stroke="rgba(35,140,65,0.85)" strokeWidth="1.6" fill="none"
-        style={{ animation:'tf-vine-sway 6s ease-in-out infinite' }} />
-      <ellipse cx="1"  cy="20" rx="3.5" ry="1.5" fill="rgba(40,180,70,0.65)" transform="rotate(-25,1,20)" />
-      <ellipse cx="5"  cy="36" rx="3"   ry="1.3" fill="rgba(40,180,70,0.60)" transform="rotate(20,5,36)" />
-      <ellipse cx="1.5" cy="52" rx="3.2" ry="1.4" fill="rgba(40,180,70,0.55)" transform="rotate(-15,1.5,52)" />
-      <ellipse cx="4"  cy="68" rx="2.8" ry="1.2" fill="rgba(40,180,70,0.50)" transform="rotate(10,4,68)" />
-
-      {/* Vine 2 — left-center */}
-      <path d="M 20 0 C 22 6, 19 14, 21 23 C 23 32, 20 40, 22 50 C 24 58, 20 65, 22 72"
-        stroke="rgba(35,140,65,0.80)" strokeWidth="1.4" fill="none"
-        style={{ animation:'tf-vine-sway 7s ease-in-out 0.5s infinite' }} />
-      <ellipse cx="24"  cy="17" rx="3.2" ry="1.4" fill="rgba(50,190,80,0.60)" transform="rotate(20,24,17)" />
-      <ellipse cx="18"  cy="32" rx="3"   ry="1.3" fill="rgba(50,190,80,0.55)" transform="rotate(-18,18,32)" />
-      <ellipse cx="24"  cy="47" rx="2.8" ry="1.2" fill="rgba(50,190,80,0.50)" transform="rotate(14,24,47)" />
-      <ellipse cx="18"  cy="62" rx="2.6" ry="1.1" fill="rgba(50,190,80,0.45)" transform="rotate(-10,18,62)" />
-
-      {/* Vine 3 — just left of jumbotron */}
-      <path d="M 32 0 C 30 5, 33 11, 31 18 C 29 25, 32 32, 30 40"
-        stroke="rgba(35,140,65,0.70)" strokeWidth="1.1" fill="none"
-        style={{ animation:'tf-vine-sway 5.5s ease-in-out 1s infinite' }} />
-      <ellipse cx="28"  cy="13" rx="2.8" ry="1.2" fill="rgba(45,185,75,0.55)" transform="rotate(-22,28,13)" />
-      <ellipse cx="33"  cy="26" rx="2.5" ry="1.1" fill="rgba(45,185,75,0.50)" transform="rotate(16,33,26)" />
-      <ellipse cx="28"  cy="38" rx="2.3" ry="1.0" fill="rgba(45,185,75,0.45)" transform="rotate(-12,28,38)" />
-
-      {/* Vine 4 — just right of jumbotron */}
-      <path d="M 68 0 C 70 5, 67 11, 69 18 C 71 25, 68 32, 70 40"
-        stroke="rgba(35,140,65,0.70)" strokeWidth="1.1" fill="none"
-        style={{ animation:'tf-vine-sway 5.5s ease-in-out 1.8s infinite' }} />
-      <ellipse cx="72"  cy="13" rx="2.8" ry="1.2" fill="rgba(45,185,75,0.55)" transform="rotate(22,72,13)" />
-      <ellipse cx="67"  cy="26" rx="2.5" ry="1.1" fill="rgba(45,185,75,0.50)" transform="rotate(-16,67,26)" />
-      <ellipse cx="72"  cy="38" rx="2.3" ry="1.0" fill="rgba(45,185,75,0.45)" transform="rotate(12,72,38)" />
-
-      {/* Vine 5 — right-center */}
-      <path d="M 80 0 C 78 6, 81 14, 79 23 C 77 32, 80 40, 78 50 C 76 58, 80 65, 78 72"
-        stroke="rgba(35,140,65,0.80)" strokeWidth="1.4" fill="none"
-        style={{ animation:'tf-vine-sway 7s ease-in-out 2s infinite' }} />
-      <ellipse cx="76"  cy="17" rx="3.2" ry="1.4" fill="rgba(50,190,80,0.60)" transform="rotate(-20,76,17)" />
-      <ellipse cx="82"  cy="32" rx="3"   ry="1.3" fill="rgba(50,190,80,0.55)" transform="rotate(18,82,32)" />
-      <ellipse cx="76"  cy="47" rx="2.8" ry="1.2" fill="rgba(50,190,80,0.50)" transform="rotate(-14,76,47)" />
-      <ellipse cx="82"  cy="62" rx="2.6" ry="1.1" fill="rgba(50,190,80,0.45)" transform="rotate(10,82,62)" />
-
-      {/* Vine 6 — far right wall */}
-      <path d="M 97 0 C 98 7, 96 15, 97 24 C 98 33, 96 42, 97 55 C 98 64, 96 72, 97 82"
-        stroke="rgba(35,140,65,0.85)" strokeWidth="1.6" fill="none"
-        style={{ animation:'tf-vine-sway 6s ease-in-out 0.8s infinite' }} />
-      <ellipse cx="99"  cy="20" rx="3.5" ry="1.5" fill="rgba(40,180,70,0.65)" transform="rotate(25,99,20)" />
-      <ellipse cx="95"  cy="36" rx="3"   ry="1.3" fill="rgba(40,180,70,0.60)" transform="rotate(-20,95,36)" />
-      <ellipse cx="98.5" cy="52" rx="3.2" ry="1.4" fill="rgba(40,180,70,0.55)" transform="rotate(15,98.5,52)" />
-      <ellipse cx="95"  cy="68" rx="2.8" ry="1.2" fill="rgba(40,180,70,0.50)" transform="rotate(-10,95,68)" />
-
-      {/* Bioluminescent nodes (junction points on wires) */}
-      {[[14,22],[50,30],[86,22],[38,26],[62,26]].map(([cx,cy],i) => (
-        <g key={i}>
-          <circle cx={cx} cy={cy} r="1.2" fill={i%2===0?'rgba(255,180,0,0.9)':'rgba(72,187,255,0.9)'}
-            style={{ animation:`tf-node 2s ease-out ${i*0.4}s infinite` }} />
-          <circle cx={cx} cy={cy} r="0.6" fill={i%2===0?'rgba(255,220,100,1)':'rgba(150,220,255,1)'} />
-        </g>
+      {/* Pixellab vine clusters — hanging from ceiling */}
+      {_VINE_X.map((left, i) => (
+        <img key={`vine-${i}`}
+          src="/sprites/trading-floor/vine-cluster.png"
+          alt="" draggable={false}
+          style={{ position:'absolute', top:0, left,
+            transform:`translateX(-50%)${i % 2 === 1 ? ' scaleX(-1)' : ''}`,
+            width:56, height:'auto', zIndex:5, pointerEvents:'none',
+            imageRendering:'pixelated',
+            animation:`tf-vine-sway ${5.5 + i * 0.35}s ease-in-out ${i * 0.55}s infinite`,
+            filter:'drop-shadow(0 6px 14px rgba(40,200,80,0.45))' }} />
       ))}
 
-      {/* Floor circuit traces (faint, connecting desks to center) */}
-      <polyline points="47,47 40,47 40,70 50,70" stroke="rgba(255,180,0,0.10)" strokeWidth="0.3" fill="none" />
-      <polyline points="53,47 60,47 60,70 50,70" stroke="rgba(255,180,0,0.10)" strokeWidth="0.3" fill="none" />
-      <polyline points="31,47 31,80 7,80"  stroke="rgba(72,187,255,0.08)"  strokeWidth="0.25" fill="none" />
-      <polyline points="69,47 69,80 93,80" stroke="rgba(34,211,164,0.08)"  strokeWidth="0.25" fill="none" />
-    </svg>
-  )
-}
-
-// ── Ceiling strip — the top wall visible from above ───────────────────────────
-function CeilingStrip() {
-  return (
-    <div style={{ position:'absolute', top:0, left:0, right:0, height:'20%', zIndex:3, pointerEvents:'none', overflow:'hidden' }}>
-      {/* Dark ceiling surface */}
-      <div style={{ position:'absolute', inset:0, background:'linear-gradient(180deg,rgba(2,3,11,0.99) 0%,rgba(4,6,18,0.92) 65%,rgba(4,6,18,0) 100%)' }} />
-
-      {/* Main conduit pipe running left-right */}
-      <div style={{ position:'absolute', top:'42%', left:'3%', right:'3%', height:8,
-        background:'linear-gradient(90deg,rgba(15,20,42,0.95),rgba(22,28,58,0.98),rgba(15,20,42,0.95))',
-        borderTop:'1px solid rgba(72,187,255,0.4)', borderBottom:'1px solid rgba(72,187,255,0.25)',
-        boxShadow:'0 0 14px rgba(72,187,255,0.2)' }} />
-
-      {/* Secondary pipe */}
-      <div style={{ position:'absolute', top:'62%', left:'8%', right:'8%', height:4,
-        background:'rgba(12,16,35,0.95)',
-        borderTop:'0.5px solid rgba(255,180,0,0.3)', borderBottom:'0.5px solid rgba(255,180,0,0.2)' }} />
-
-      {/* Vent grilles — left of jumbotron */}
-      {[3.5, 8].map((x,i) => (
-        <div key={i} style={{ position:'absolute', left:`${x}%`, top:'18%', width:28, height:16,
-          background:'rgba(8,12,30,0.97)', border:'1px solid rgba(72,187,255,0.3)',
-          display:'flex', gap:1.5, padding:2, alignItems:'stretch' }}>
-          {Array(6).fill(0).map((_,j) => (
-            <div key={j} style={{ flex:1, background:'rgba(72,187,255,0.14)', height:'100%', borderRadius:0.5 }} />
-          ))}
-        </div>
+      {/* Pixellab wire bundles — hanging from ceiling conduit brackets */}
+      {_WIRE_X.map((left, i) => (
+        <img key={`wire-${i}`}
+          src="/sprites/trading-floor/wire-bundle.png"
+          alt="" draggable={false}
+          style={{ position:'absolute', top:0, left,
+            transform:'translateX(-50%)',
+            width:40, height:'auto', zIndex:5, pointerEvents:'none',
+            imageRendering:'pixelated',
+            filter:`drop-shadow(0 4px 10px rgba(255,160,0,${0.45 + i * 0.06}))` }} />
       ))}
-
-      {/* Vent grilles — right of jumbotron */}
-      {[89, 93.5].map((x,i) => (
-        <div key={i} style={{ position:'absolute', left:`${x}%`, top:'18%', width:28, height:16,
-          background:'rgba(8,12,30,0.97)', border:'1px solid rgba(72,187,255,0.3)',
-          display:'flex', gap:1.5, padding:2, alignItems:'stretch' }}>
-          {Array(6).fill(0).map((_,j) => (
-            <div key={j} style={{ flex:1, background:'rgba(72,187,255,0.14)', height:'100%', borderRadius:0.5 }} />
-          ))}
-        </div>
-      ))}
-
-      {/* Bio drip drops (where vines originate) */}
-      {[3, 20, 50, 80, 97].map((x, i) => (
-        <div key={i} style={{ position:'absolute', left:`${x}%`, top:'55%',
-          width:3, height:'120%',
-          background:`linear-gradient(180deg, rgba(40,180,70,${0.6+i*0.04}) 0%, rgba(40,180,70,0) 100%)`,
-          borderRadius:2 }} />
-      ))}
-
-      {/* Pipe junction bolts */}
-      {[12, 28, 50, 72, 88].map((x, i) => (
-        <div key={i} style={{ position:'absolute', left:`${x}%`, top:'38%',
-          width:10, height:16, marginLeft:-5,
-          background:'rgba(18,24,52,0.95)',
-          border:'1px solid rgba(255,180,0,0.4)',
-          boxShadow:'0 0 8px rgba(255,180,0,0.2)' }} />
-      ))}
-    </div>
+    </>
   )
 }
 
@@ -1058,11 +928,8 @@ function TradingFloorMap({ snap, orders, log, backlog, loading, selectedZone, on
       {/* Zone label chips */}
       {ZONES.map(z => <ZoneChip key={z.id} zone={z} />)}
 
-      {/* Ceiling strip (top wall visual) */}
-      <CeilingStrip />
-
-      {/* Wires and vines SVG */}
-      <WiresAndVines />
+      {/* Pixellab map decorations — vines & wires from ceiling */}
+      <MapDecor />
 
       {/* Desk workstations */}
       {DESKS.map((d, i) => <Desk key={i} x={d.x} y={d.y} c={d.c} />)}
