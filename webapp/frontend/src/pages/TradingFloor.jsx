@@ -903,21 +903,20 @@ function TradingFloorMap({ snap, orders, log, backlog, loading, selectedZone, on
   return (
     <div style={{
       position:'relative', flex:1, overflow:'hidden',
-      // Floor — tile grid with zone ambient lighting
-      background:'rgba(5,7,18,1)',
+      // Floor — Pixellab obsidian tiles + zone ambient lighting
+      background:'rgba(4,5,16,1)',
       backgroundImage:[
-        // Zone ambient lighting (subtle floor tinting per zone)
-        'radial-gradient(ellipse 34% 50% at 15% 52%, rgba(72,187,255,0.07) 0%, transparent 100%)',
-        'radial-gradient(ellipse 36% 52% at 50% 47%, rgba(155,114,255,0.09) 0%, transparent 100%)',
-        'radial-gradient(ellipse 34% 50% at 85% 52%, rgba(34,211,164,0.07) 0%, transparent 100%)',
-        'radial-gradient(ellipse 100% 32% at 50% 82%, rgba(255,178,63,0.07) 0%, transparent 100%)',
+        // Zone ambient lighting (subtle floor tinting per zone) — drawn over tile texture
+        'radial-gradient(ellipse 34% 50% at 15% 52%, rgba(72,187,255,0.10) 0%, transparent 100%)',
+        'radial-gradient(ellipse 36% 52% at 50% 47%, rgba(155,114,255,0.12) 0%, transparent 100%)',
+        'radial-gradient(ellipse 34% 50% at 85% 52%, rgba(34,211,164,0.10) 0%, transparent 100%)',
+        'radial-gradient(ellipse 100% 32% at 50% 82%, rgba(255,178,63,0.10) 0%, transparent 100%)',
         // ELLIE command center glow
-        'radial-gradient(circle 180px at 47% 47%, rgba(155,114,255,0.12) 0%, transparent 100%)',
-        // Floor tile grid — dark grout lines between slightly lighter tiles
-        'linear-gradient(rgba(0,2,12,0.9) 1.5px, rgba(7,9,20,0) 1.5px)',
-        'linear-gradient(90deg, rgba(0,2,12,0.9) 1.5px, rgba(7,9,20,0) 1.5px)',
+        'radial-gradient(circle 180px at 47% 47%, rgba(155,114,255,0.15) 0%, transparent 100%)',
+        // Pixellab floor — dark obsidian + amber circuit traces (Wang tileset, 128×128 at 2× scale)
+        'url(/sprites/trading-floor/floor-tiles.png)',
       ].join(', '),
-      backgroundSize:'cover, cover, cover, cover, cover, 56px 56px, 56px 56px',
+      backgroundSize:'cover, cover, cover, cover, cover, 256px 256px',
     }}>
 
       {/* Zone clickable overlays */}
