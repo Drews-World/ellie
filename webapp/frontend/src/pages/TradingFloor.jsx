@@ -41,20 +41,33 @@ const CHAR = {
   trader: '1eb37793-f1cb-4c5a-a0d8-019a46afa58b',
   risk:   'f3c1eee9-6017-492e-a920-b752dfb082d4',
 }
-// Walk anim IDs — animation_name passed to animate_character
-// CDN: ${_PL}/${charId}/animations/${aid}/${dir}/${frameIdx}.png
+// Walk animation UUIDs — each direction gets its own UUID from Pixellab
+// CDN: ${_PL}/${charId}/animations/${uuid}/${dir}/${frameIdx}.png
+// Retrieved via get_character() after animate_character completes
 const WALK_ANIMS = {
-  quant:  'walk',   // generating
-  bull:   null,
-  trader: null,
-  risk:   null,
+  quant: {
+    'south':      'c76f9496-e817-4c8d-8770-fe86c96ee022',
+    'east':       'a1209815-e970-41e3-95e5-c780691dfc62',
+    'north':      '883757b5-3ee0-413e-9e82-703b869890af',
+    'west':       '682bbb5d-1bfd-438b-8ee6-d356309e432c',
+    'south-east': 'fba9cef9-38c1-416c-852e-8f330d184b31',
+    'north-east': '8aac7990-59d7-4e0d-87df-09a31343a173',
+    'north-west': '14eb6f04-8457-4cfa-821d-ad02d777ae49',
+    'south-west': '949b7939-c411-48bc-93f3-766968a131fa',
+  },
+  trader: null,  // generating — will be filled when animations complete
+  risk:   null,  // queued after trader finishes
+  bull:   null,  // queued after risk finishes
 }
 
 function mkSprite(key, opts) {
-  const id  = CHAR[key]
-  const aid = WALK_ANIMS[key]
+  const id    = CHAR[key]
+  const anims = WALK_ANIMS[key]   // { [dir]: uuid } or null
   const walkFrames = {}
-  _DIRS.forEach(dir => { walkFrames[dir] = aid ? _anim(id, aid, dir) : [] })
+  _DIRS.forEach(dir => {
+    const uuid = anims?.[dir]
+    walkFrames[dir] = uuid ? _anim(id, uuid, dir) : []
+  })
   return { id, idleFrames: _rot(id), walkFrames, ...opts }
 }
 
