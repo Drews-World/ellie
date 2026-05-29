@@ -136,3 +136,148 @@ input:focus, textarea:focus, select:focus {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ─── Space Station Mode (Business Factory) ─── */
+@keyframes led-blink {
+  0%, 80%, 100% { opacity: 1; }
+  90% { opacity: 0.2; }
+}
+
+@keyframes corridor-flow {
+  0%   { transform: translateX(-120%); opacity: 0; }
+  15%  { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { transform: translateX(220%); opacity: 0; }
+}
+
+@keyframes module-boot {
+  from { opacity: 0; transform: scaleY(0.94); }
+  to   { opacity: 1; transform: scaleY(1); }
+}
+
+@keyframes holo-flicker {
+  0%, 96%, 100% { opacity: 1; }
+  97% { opacity: 0.85; }
+  98% { opacity: 1; }
+  99% { opacity: 0.9; }
+}
+
+@keyframes sprite-walk {
+  0%, 100% { transform: translateY(0px); }
+  25%       { transform: translateY(-5px); }
+  75%       { transform: translateY(2px); }
+}
+
+@keyframes ellie-pulse {
+  0%, 100% { opacity: 0.45; transform: scale(1); }
+  50%       { opacity: 0.85; transform: scale(1.12); }
+}
+
+@keyframes map-float {
+  0%, 100% { transform: translate(-50%, -50%) translateY(0px); }
+  50%       { transform: translate(-50%, -50%) translateY(-7px); }
+}
+
+body.space-mode {
+  background: #060609;
+  --grad-room-bg: linear-gradient(180deg, #060609 0%, #0A0A0F 100%);
+
+  --paper-50:  #0A0A12;
+  --paper-100: #0E0E18;
+  --paper-200: rgba(255, 220, 0, 0.06);
+  --paper-300: rgba(255, 220, 0, 0.16);
+
+  --ink-900: #F2F0FF;
+  --ink-800: #D5D0FF;
+  --ink-700: #B0ACEE;
+  --ink-600: #8880CC;
+  --ink-500: #6460A8;
+  --ink-400: rgba(170, 165, 220, 0.55);
+  --ink-300: rgba(255, 220, 0, 0.2);
+
+  --shadow-sm: 0 1px 4px rgba(0,0,0,0.85);
+  --shadow-md: 0 4px 20px rgba(0,0,0,0.95);
+  --shadow-pop: 0 8px 40px rgba(255,220,0,0.14), 0 0 0 1px rgba(255,220,0,0.18);
+
+  --radius-xl: 8px;
+  --radius-lg: 6px;
+  --radius-md: 4px;
+  --radius-sm: 3px;
+}
+
+@keyframes neon-flicker {
+  0%, 18%, 22%, 25%, 53%, 57%, 100% { opacity: 1; }
+  20%, 24%, 55% { opacity: 0.38; }
+}
+
+@keyframes glitch-x {
+  0%, 88%, 100% { transform: translateX(0) scaleX(1); }
+  91% { transform: translateX(-3px) scaleX(0.99); }
+  93% { transform: translateX(3px) scaleX(1.01); }
+  95% { transform: translateX(-1px) scaleX(1); }
+}
+
+/* ─── Pixel art sprite animations ─── */
+@keyframes sprite-bob {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-4px); }
+}
+
+@keyframes sprite-pulse {
+  0%, 100% { opacity: 0.25; }
+  50%       { opacity: 0.65; }
+}
+
+/* ─── Gamification: floor beams, CRT, monitor glows, game buttons ─── */
+@keyframes scanline-scroll {
+  0%   { background-position: 0 0; }
+  100% { background-position: 0 4px; }
+}
+
+@keyframes data-beam-h {
+  0%   { left: -12%; opacity: 0; }
+  6%   { opacity: 1; }
+  94%  { opacity: 1; }
+  100% { left: 112%; opacity: 0; }
+}
+
+@keyframes data-beam-v {
+  0%   { top: -12%; opacity: 0; }
+  6%   { opacity: 1; }
+  94%  { opacity: 1; }
+  100% { top: 112%; opacity: 0; }
+}
+
+@keyframes monitor-glow {
+  0%, 100% { opacity: 0.22; }
+  50%       { opacity: 0.62; }
+}
+
+@keyframes node-ring-burst {
+  0%   { transform: translate(-50%, -50%) scale(1); opacity: 0.75; }
+  100% { transform: translate(-50%, -50%) scale(3.2); opacity: 0; }
+}
+
+/* ─── Game button base: applied via className="btn-game" ─── */
+.btn-game {
+  border-radius: 0 !important;
+  font-family: var(--font-mono) !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  position: relative !important;
+  overflow: hidden !important;
+  transition: box-shadow 0.18s, transform 0.06s, opacity 0.15s, filter 0.15s !important;
+}
+.btn-game::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.07) 0%, transparent 55%);
+  pointer-events: none;
+}
+.btn-game:not(:disabled):active {
+  transform: translateY(2px) !important;
+}
+.btn-game:not(:disabled):hover {
+  filter: brightness(1.18) !important;
+}

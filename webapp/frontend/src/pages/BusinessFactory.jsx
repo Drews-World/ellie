@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import RoomShell from '../components/shared/RoomShell'
 import StatusPill from '../components/shared/StatusPill'
 import api from '../lib/api'
+import AgentRoom from '../components/business/AgentRoom'
 
 // ── Shared room card wrapper ──────────────────────────────────────────────────
 function Room({ icon, name, accent, status, action, children, style = {} }) {
@@ -41,20 +42,57 @@ function Room({ icon, name, accent, status, action, children, style = {} }) {
 
 function Btn({ onClick, disabled, color = 'var(--violet-500)', children, small }) {
   return (
-    <button onClick={onClick} disabled={disabled} style={{
-      background: `color-mix(in srgb, ${color} 12%, transparent)`,
-      border: `1.5px solid ${color}`,
-      borderRadius: 'var(--radius-sm)',
+    <button onClick={onClick} disabled={disabled} className="btn-game" style={{
+      background: `color-mix(in srgb, ${color} 8%, rgba(2,3,10,0.92))`,
+      border: `1px solid ${color}`,
       color,
-      fontFamily: 'var(--font-ui)',
       fontWeight: 700,
-      fontSize: small ? 11 : 12,
-      padding: small ? '3px 10px' : '6px 14px',
+      fontSize: small ? 9 : 10,
+      padding: small ? '4px 11px' : '7px 16px',
       cursor: disabled ? 'not-allowed' : 'pointer',
-      opacity: disabled ? 0.5 : 1,
+      opacity: disabled ? 0.38 : 1,
       whiteSpace: 'nowrap',
-      transition: 'opacity var(--transition)',
+      boxShadow: disabled ? 'none' : `0 0 8px color-mix(in srgb, ${color} 22%, transparent)`,
     }}>{children}</button>
+  )
+}
+
+// ── Game-style header button (larger, more dramatic) ──────────────────────────
+function GameBtn({ onClick, disabled, color = '#FFE600', children }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="btn-game"
+      style={{
+        background: `color-mix(in srgb, ${color} 7%, rgba(1,2,8,0.95))`,
+        border: `1px solid ${color}`,
+        color,
+        fontWeight: 700,
+        fontSize: 10,
+        padding: '7px 20px',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.38 : 1,
+        boxShadow: disabled ? 'none' : `0 0 14px color-mix(in srgb, ${color} 35%, transparent), inset 0 0 0 1px color-mix(in srgb, ${color} 8%, transparent)`,
+        position: 'relative',
+      }}
+      onMouseEnter={e => { if (!disabled) e.currentTarget.style.boxShadow = `0 0 28px color-mix(in srgb, ${color} 65%, transparent)` }}
+      onMouseLeave={e => { if (!disabled) e.currentTarget.style.boxShadow = `0 0 14px color-mix(in srgb, ${color} 35%, transparent), inset 0 0 0 1px color-mix(in srgb, ${color} 8%, transparent)` }}
+    >
+      {/* Corner brackets */}
+      {[['top','left'],['top','right'],['bottom','left'],['bottom','right']].map(([v,h]) => (
+        <span key={v+h} style={{
+          position: 'absolute',
+          [v]: 2, [h]: 2,
+          width: 6, height: 6,
+          [`border${v === 'top' ? 'Top' : 'Bottom'}`]: `1.5px solid ${color}`,
+          [`border${h === 'left' ? 'Left' : 'Right'}`]: `1.5px solid ${color}`,
+          opacity: 0.85,
+          pointerEvents: 'none',
+        }} />
+      ))}
+      {children}
+    </button>
   )
 }
 
@@ -70,9 +108,448 @@ function Empty({ children }) {
   return <p style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-500)', fontStyle: 'italic' }}>{children}</p>
 }
 
+function Corridor({ direction }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{
+        [direction === 'h' ? 'width' : 'height']: '100%',
+        [direction === 'h' ? 'height' : 'width']: 1,
+        background: 'rgba(255,220,0,0.42)',
+        boxShadow: '0 0 7px rgba(255,220,0,0.28)',
+        position: 'relative', overflow: 'hidden',
+      }} />
+    </div>
+  )
+}
+
+function CorridorIntersection() {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{
+        width: 4, height: 4, borderRadius: 99,
+        background: 'rgba(255,220,0,0.7)',
+        boxShadow: '0 0 7px rgba(255,220,0,0.55)',
+      }} />
+    </div>
+  )
+}
+
 // ── Pipeline stages bar ───────────────────────────────────────────────────────
 const PIPELINE_STAGES = ['Nova', 'Forge', 'Review', 'Publish']
 const FORGE_STEPS = new Set(['designing', 'imaging', 'concepts', 'scoring', 'saving'])
+
+// ── Office map room zones ─────────────────────────────────────────────────────
+// Original map: 400×320 cross-shaped biopunk complex, ELLIE central circular chamber
+const MAP_ROOMS = [
+  {
+    id: 'ellie',
+    label: 'ELLIE HQ',
+    accent: '#9B72FF', accentRgb: '155,114,255',
+    zoneLeft: '27%', zoneTop: '22%', zoneW: '46%', zoneH: '52%',
+    chipLeft: '50%', chipTop: '24%',
+  },
+  {
+    id: 'nova',
+    label: 'Nova',
+    accent: '#22D3A4', accentRgb: '34,211,164',
+    zoneLeft: '0%',  zoneTop: '0%',  zoneW: '30%', zoneH: '40%',
+    chipLeft: '15%', chipTop: '2%',
+  },
+  {
+    id: 'activity',
+    label: 'Activity',
+    accent: '#48BBFF', accentRgb: '72,187,255',
+    zoneLeft: '70%', zoneTop: '0%',  zoneW: '30%', zoneH: '40%',
+    chipLeft: '85%', chipTop: '2%',
+  },
+  {
+    id: 'forge',
+    label: 'Forge',
+    accent: '#FFB23F', accentRgb: '255,178,63',
+    zoneLeft: '0%',  zoneTop: '60%', zoneW: '30%', zoneH: '40%',
+    chipLeft: '15%', chipTop: '61%',
+  },
+  {
+    id: 'archives',
+    label: 'Archives',
+    accent: '#FF6BA8', accentRgb: '255,107,168',
+    zoneLeft: '27%', zoneTop: '73%', zoneW: '46%', zoneH: '27%',
+    chipLeft: '50%', chipTop: '74%',
+  },
+  {
+    id: 'treasury',
+    label: 'Treasury',
+    accent: '#FFD600', accentRgb: '255,214,0',
+    zoneLeft: '70%', zoneTop: '60%', zoneW: '30%', zoneH: '40%',
+    chipLeft: '85%', chipTop: '61%',
+  },
+]
+
+// ── Agent sprites + patrol paths (% of map container) ────────────────────────
+// Calibrated for original 400×320 cross-shaped biopunk map
+const MOVE_MS = 2800
+
+// Responsive sprite display size — scales with viewport so sprites stay
+// proportional on any screen; JS shadow calc no longer needs a pixel number.
+const SPRITE_DISPLAY = 'clamp(90px, 8vw, 144px)'
+
+// Pixellab CDN base — rotation stills per direction (loaded immediately)
+const _PL = 'https://backblaze.pixellab.ai/file/pixellab-characters/c44d0e95-f47c-4c39-96ed-91692c3f5537'
+const _DIRS = ['south','east','north','west','south-east','north-east','north-west','south-west']
+function _rotFrames(charId) {
+  return Object.fromEntries(_DIRS.map(d => [d, [`${_PL}/${charId}/rotations/${d}.png`]]))
+}
+// Generate sequential frame URLs from a completed Pixellab animation job
+function _animFrames(charId, animId, dir, count = 8) {
+  return Array.from({ length: count }, (_, i) =>
+    `${_PL}/${charId}/animations/${animId}/${dir}/${i}.png`
+  )
+}
+
+const MAP_SPRITES = [
+  {
+    id: 'worker-nova',
+    src: '/sprites/sprite-nova.png',
+    roomId: 'nova',
+    w: 120, h: 120, taskIcon: '🔭', glowColor: '34,211,164',
+    label: 'NOVA · RESEARCH',
+    interval: 5200,
+    // walkFrames: real 8-frame walk cycles from Pixellab (6/8 dirs complete; SE+NE fall back to rotation stills)
+    walkFrames: (() => {
+      const id = '061aa986-6340-4e23-acc5-a984bfe8ad0c'
+      return {
+        south:       _animFrames(id, 'c57d0122-e793-44a7-913b-4885dd08218a', 'south'),
+        north:       _animFrames(id, '455784c5-7088-4cb8-b690-4577545f254b', 'north'),
+        east:        _animFrames(id, 'e55c458d-07ee-41e2-9011-64f2359ba90d', 'east'),
+        west:        _animFrames(id, 'a25c0dc1-5d5b-48f9-bd5b-d1e0e9263db7', 'west'),
+        'south-west':_animFrames(id, 'e87c591a-8937-401c-a4d4-128c5313fb50', 'south-west'),
+        'north-west':_animFrames(id, '4b7f204e-5b55-4596-a83d-7e9bfbd5c8c5', 'north-west'),
+        'south-east':_animFrames(id, '0ce49b17-c815-4a55-874e-fac7eee8f762', 'south-east'),
+        'north-east':_animFrames(id, '65fdda42-fc88-4975-b632-4688b75868a3', 'north-east'),
+      }
+    })(),
+    // idleFrames: directional stills from Pixellab so sprite faces the right way
+    idleFrames: _rotFrames('061aa986-6340-4e23-acc5-a984bfe8ad0c'),
+    path: [
+      { x: '9%',  y: '12%' },
+      { x: '20%', y: '7%'  },
+      { x: '24%', y: '24%' },
+      { x: '7%',  y: '30%' },
+    ],
+  },
+  {
+    id: 'worker-activity',
+    src: '/sprites/sprite-activity.png',
+    roomId: 'activity',
+    w: 120, h: 120, taskIcon: '📊', glowColor: '72,187,255',
+    label: 'OPS · ANALYSIS',
+    interval: 4600,
+    walkFrames: (() => {
+      const id = '8b9605dd-3f40-446a-ace1-5aa887c10627'
+      return {
+        east:        _animFrames(id, '9ce03ed4-e193-49ba-9678-f3fccdfb3239', 'east'),
+        north:       _animFrames(id, '96070266-41f6-4fe7-b3bb-89643a152073', 'north'),
+        west:        _animFrames(id, '57aabc77-6cea-4173-af7c-a63ca387281d', 'west'),
+        'north-west':_animFrames(id, 'a7e4607d-10dd-4545-a7a6-d82777c79314', 'north-west'),
+        'south-west':_animFrames(id, '40bdbda5-9e89-46e6-8a0b-f5ac4970f263', 'south-west'),
+        'north-east':_animFrames(id, '5a24bb7d-eb02-4c00-879e-3e0b2303f163', 'north-east'),
+        'south-east':_animFrames(id, 'b3e7524f-a4e9-4a84-b653-197706a50163', 'south-east'),
+        south:       _animFrames(id, '3609add2-994e-4359-b390-5b0b65a632c1', 'south'),
+      }
+    })(),
+    idleFrames: _rotFrames('8b9605dd-3f40-446a-ace1-5aa887c10627'),
+    path: [
+      { x: '79%', y: '11%' },
+      { x: '91%', y: '7%'  },
+      { x: '87%', y: '27%' },
+      { x: '76%', y: '22%' },
+    ],
+  },
+  {
+    id: 'worker-forge',
+    src: '/sprites/sprite-forge.png',
+    roomId: 'forge',
+    w: 120, h: 120, taskIcon: '🎨', glowColor: '255,178,63',
+    label: 'FORGE · DESIGN',
+    interval: 5600,
+    walkFrames: (() => {
+      const id = '853c6624-f6f3-4a68-b6b5-a09982ba775e'
+      return {
+        east:        _animFrames(id, '87fe5f10-95cf-4367-88e4-b8604864bddb', 'east'),
+        north:       _animFrames(id, 'bd17aad6-1c0f-414f-95f5-c14d25e3c6c3', 'north'),
+        west:        _animFrames(id, '5d119873-26da-434b-8aef-f7853e5254e5', 'west'),
+        'north-west':_animFrames(id, '9645ef30-1211-4edb-af40-32b87c52acd9', 'north-west'),
+        'north-east':_animFrames(id, 'b9993834-cc15-4a4c-b9d6-26190454e3fa', 'north-east'),
+        'south-east':_animFrames(id, '6ec010f6-6505-43fc-95ab-0dff3340c7dc', 'south-east'),
+        south:       _animFrames(id, '2d5f8136-d934-4d35-8e42-b6b1ad48b28d', 'south'),
+        'south-west':_animFrames(id, '990ec81a-cce2-43d2-b415-01d845bcaff7', 'south-west'),
+      }
+    })(),
+    idleFrames: _rotFrames('853c6624-f6f3-4a68-b6b5-a09982ba775e'),
+    path: [
+      { x: '11%', y: '68%' },
+      { x: '23%', y: '75%' },
+      { x: '8%',  y: '85%' },
+      { x: '22%', y: '92%' },
+    ],
+  },
+  {
+    id: 'worker-archives',
+    src: '/sprites/sprite-archives.png',
+    roomId: 'archives',
+    w: 120, h: 120, taskIcon: '🗄️', glowColor: '255,107,168',
+    label: 'VAULT · ARCHIVE',
+    interval: 6200,
+    walkFrames: (() => {
+      const id = '2ac5370e-5abd-4ee9-b955-14ee4d7dc6ab'
+      return {
+        south:       _animFrames(id, 'ba404a66-32e1-45b6-837c-7bf539ddd886', 'south'),
+        east:        _animFrames(id, '64aa7391-6518-4268-a549-bcaad9e138e7', 'east'),
+        north:       _animFrames(id, 'dcb9d350-9997-45f2-b18c-993a7779291b', 'north'),
+        west:        _animFrames(id, '5d38a378-8521-496c-8e11-3963810d349c', 'west'),
+        'south-east':_animFrames(id, 'b917bd6e-ae88-4b28-83f8-1ff650086f53', 'south-east'),
+        'north-east':_animFrames(id, 'f6595548-33ba-4d81-b570-22ff6c3c37b2', 'north-east'),
+        'north-west':_animFrames(id, '753fed99-6e5b-4d3e-b6b4-6c951e9ea529', 'north-west'),
+        'south-west':_animFrames(id, '34a6b0ff-3900-4802-9683-cd92d87797b1', 'south-west'),
+      }
+    })(),
+    idleFrames: _rotFrames('2ac5370e-5abd-4ee9-b955-14ee4d7dc6ab'),
+    path: [
+      { x: '36%', y: '81%' },
+      { x: '50%', y: '88%' },
+      { x: '64%', y: '81%' },
+    ],
+  },
+  {
+    id: 'worker-treasury',
+    src: '/sprites/sprite-treasury.png',
+    roomId: 'treasury',
+    w: 120, h: 120, taskIcon: '💰', glowColor: '255,214,0',
+    label: 'TREASURY · OPS',
+    interval: 5000,
+    walkFrames: (() => {
+      const id = '9779d194-d346-4f4b-8176-5d8a312fd425'
+      return {
+        south:       _animFrames(id, '58077329-6142-4bef-9469-9ef3a11be4bd', 'south'),
+        east:        _animFrames(id, '92cb8e2b-ec70-4137-9ef5-168b4303f7ac', 'east'),
+        north:       _animFrames(id, '8474078b-6322-41b3-bd47-a6f14b490cd5', 'north'),
+        west:        _animFrames(id, 'cc43e8eb-6746-4f86-a741-ce6b77355bd9', 'west'),
+        'south-east':_animFrames(id, '79d80c30-5f94-4aca-ac8e-6406ec901be1', 'south-east'),
+        'north-east':_animFrames(id, '52632652-8054-4efd-a1ef-d49681a2a56b', 'north-east'),
+        'north-west':_animFrames(id, '58feeee4-d3ab-4a84-add1-3fda48de08f4', 'north-west'),
+        'south-west':_animFrames(id, '9b2e67c1-c536-4b97-b566-c27a5c039ec6', 'south-west'),
+      }
+    })(),
+    idleFrames: _rotFrames('9779d194-d346-4f4b-8176-5d8a312fd425'),
+    path: [
+      { x: '80%', y: '68%' },
+      { x: '91%', y: '75%' },
+      { x: '83%', y: '88%' },
+      { x: '76%', y: '78%' },
+    ],
+  },
+]
+
+// ── Direction detection from movement vector ──────────────────────────────────
+function getWalkDir(from, to) {
+  const dx = parseFloat(to.x) - parseFloat(from.x)
+  const dy = parseFloat(to.y) - parseFloat(from.y)
+  const adx = Math.abs(dx), ady = Math.abs(dy)
+  if (adx < 0.5 && ady < 0.5) return 'south'
+  if (adx > ady * 1.6) return dx > 0 ? 'east' : 'west'
+  if (ady > adx * 1.6) return dy > 0 ? 'south' : 'north'
+  if (dx > 0 && dy > 0) return 'south-east'
+  if (dx > 0 && dy < 0) return 'north-east'
+  if (dx < 0 && dy > 0) return 'south-west'
+  return 'north-west'
+}
+
+// ── Walking sprite on map ─────────────────────────────────────────────────────
+function MapWalker({ sprite, online }) {
+  const [posIdx, setPosIdx]     = useState(0)
+  const [walking, setWalking]   = useState(false)
+  const [walkDir, setWalkDir]   = useState('south')
+  const [frameIdx, setFrameIdx] = useState(0)
+  const mountedRef = useRef(true)
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false } }, [])
+
+  // ── Position movement — advances posIdx on a timer ────────────────────────
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!mountedRef.current) return
+      setPosIdx(curr => {
+        const next = (curr + 1) % sprite.path.length
+        setWalkDir(getWalkDir(sprite.path[curr], sprite.path[next]))
+        return next
+      })
+      setWalking(true)
+      setFrameIdx(0) // reset frame at each new move
+      setTimeout(() => { if (mountedRef.current) setWalking(false) }, MOVE_MS - 500)
+    }, sprite.interval)
+    return () => clearInterval(id)
+  }, [sprite.interval, sprite.path])
+
+  // ── Frame cycling — runs at game speed (150ms walk, 400ms idle) ───────────
+  useEffect(() => {
+    const dirFrames = walking
+      ? (sprite.walkFrames?.[walkDir] ?? sprite.walkFrames?.south ?? [])
+      : (sprite.idleFrames?.[walkDir] ?? sprite.idleFrames?.south ?? [])
+    if (!dirFrames.length) return
+    const delay = walking ? 140 : 380
+    const id = setInterval(() => {
+      if (!mountedRef.current) return
+      setFrameIdx(i => (i + 1) % dirFrames.length)
+    }, delay)
+    return () => clearInterval(id)
+  }, [walking, walkDir, sprite.walkFrames, sprite.idleFrames])
+
+  const pos = sprite.path[posIdx]
+  const gc  = sprite.glowColor
+
+  // Current sprite source — animated frame or directional still or fallback
+  const dirFrames = walking
+    ? (sprite.walkFrames?.[walkDir] ?? sprite.walkFrames?.south ?? [])
+    : (sprite.idleFrames?.[walkDir] ?? sprite.idleFrames?.south ?? [])
+  const currentSrc = dirFrames.length ? dirFrames[frameIdx % dirFrames.length] : sprite.src
+
+  return (
+    <div style={{
+      position: 'absolute', left: pos.x, top: pos.y,
+      transform: 'translate(-50%, -50%)',
+      zIndex: 5, pointerEvents: 'none',
+      transition: `left ${MOVE_MS}ms cubic-bezier(0.45,0,0.55,1), top ${MOVE_MS}ms cubic-bezier(0.45,0,0.55,1)`,
+    }}>
+      {/* Agent label — shows when idle */}
+      <div style={{
+        position: 'absolute', bottom: '100%', left: '50%',
+        transform: 'translateX(-50%)',
+        whiteSpace: 'nowrap', marginBottom: 4,
+        opacity: walking ? 0 : 1, transition: 'opacity 0.5s',
+        background: 'rgba(2,3,8,0.88)',
+        border: `1px solid rgba(${gc},0.6)`,
+        borderRadius: 3, padding: '2px 7px',
+        display: 'flex', alignItems: 'center', gap: 4,
+      }}>
+        <span style={{ fontSize: 11 }}>{sprite.taskIcon}</span>
+        <span style={{
+          fontSize: 7, fontFamily: 'var(--font-mono)', fontWeight: 700,
+          color: `rgb(${gc})`, letterSpacing: '0.1em', textTransform: 'uppercase',
+        }}>{sprite.label}</span>
+        {online && (
+          <span style={{
+            width: 4, height: 4, borderRadius: '50%',
+            background: `rgb(${gc})`, boxShadow: `0 0 5px rgb(${gc})`,
+            animation: 'led-blink 1.2s ease-in-out infinite', display: 'inline-block',
+          }} />
+        )}
+      </div>
+
+      {/* Responsive sprite container — viewport-scaled, shadow inside so it tracks */}
+      <div style={{
+        width: SPRITE_DISPLAY, height: SPRITE_DISPLAY,
+        flexShrink: 0, position: 'relative',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {/* Shadow pool — inherits container size so it scales automatically */}
+        <div style={{
+          position: 'absolute', bottom: -4, left: '50%',
+          transform: 'translateX(-50%)',
+          width: '140%', height: 12,
+          background: `radial-gradient(ellipse, rgba(${gc},0.45) 0%, transparent 70%)`,
+          borderRadius: '50%', animation: 'sprite-pulse 2s ease-in-out infinite',
+        }} />
+        <img
+          src={currentSrc}
+          alt="" draggable={false}
+          style={{
+            width: '100%', height: '100%',
+            objectFit: 'contain',
+            imageRendering: 'pixelated', display: 'block',
+            filter: online
+              ? `drop-shadow(0 0 6px rgba(${gc},0.8)) drop-shadow(0 2px 8px rgba(${gc},0.4))`
+              : `drop-shadow(0 0 3px rgba(${gc},0.3)) brightness(0.75)`,
+          }}
+          onError={e => { e.currentTarget.style.visibility = 'hidden' }}
+        />
+      </div>
+    </div>
+  )
+}
+
+// ── ELLIE boss sprite — center of map ─────────────────────────────────────────
+function EllieOnMap() {
+  return (
+    <div style={{
+      position: 'absolute', left: '50%', top: '47%',
+      transform: 'translate(-50%, -50%)',
+      zIndex: 6, pointerEvents: 'none',
+      animation: 'map-float 3.5s ease-in-out infinite',
+    }}>
+      {/* Wide outer glow */}
+      <div style={{
+        position: 'absolute', bottom: -20, left: '50%',
+        transform: 'translateX(-50%)',
+        width: 260, height: 80,
+        background: 'radial-gradient(ellipse, rgba(155,114,255,0.6) 0%, transparent 70%)',
+        animation: 'ellie-pulse 2.4s ease-in-out infinite',
+        borderRadius: '50%',
+      }} />
+      {/* ELLIE name plate */}
+      <div style={{
+        position: 'absolute', top: -28, left: '50%',
+        transform: 'translateX(-50%)',
+        background: 'rgba(2,2,10,0.92)',
+        border: '1px solid rgba(155,114,255,0.7)',
+        borderRadius: 3, padding: '3px 12px',
+        whiteSpace: 'nowrap',
+        boxShadow: '0 0 16px rgba(155,114,255,0.4)',
+      }}>
+        <span style={{
+          fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700,
+          color: '#9B72FF', letterSpacing: '0.2em', textTransform: 'uppercase',
+        }}>⬡ ELLIE · LEADER AI · OPERATIONAL</span>
+      </div>
+      <img
+        src="/sprites/EllieSprite/angular_menacing_white_chrome_body_with_dark_biome/rotations/south.png"
+        alt="ELLIE"
+        draggable={false}
+        style={{
+          width: 'clamp(220px, 26vw, 360px)',
+          height: 'clamp(220px, 26vw, 360px)',
+          objectFit: 'contain',
+          imageRendering: 'pixelated', position: 'relative', zIndex: 1, display: 'block',
+          filter: 'drop-shadow(0 0 20px rgba(155,114,255,0.9)) drop-shadow(0 0 40px rgba(155,114,255,0.4))',
+        }}
+      />
+    </div>
+  )
+}
+
+// ── Room live-data mini panel ─────────────────────────────────────────────────
+function RoomLiveOverlay({ left, top, accent, accentRgb, label, value, sub, blink }) {
+  return (
+    <div style={{
+      position: 'absolute', left, top,
+      zIndex: 4, pointerEvents: 'none',
+      background: 'rgba(2,3,8,0.9)',
+      border: `1px solid rgba(${accentRgb},0.55)`,
+      borderRadius: 3, padding: '5px 9px',
+      backdropFilter: 'blur(6px)',
+      minWidth: 72,
+      boxShadow: `0 0 18px rgba(${accentRgb},0.25)`,
+      animation: 'module-boot 0.4s ease-out both',
+    }}>
+      <div style={{ fontSize: 7, fontFamily: 'var(--font-mono)', color: `rgba(${accentRgb},0.65)`, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 2 }}>{label}</div>
+      <div style={{ fontSize: 15, fontFamily: 'var(--font-mono)', fontWeight: 700, color: accent, lineHeight: 1.1 }}>{value}</div>
+      {sub && (
+        <div style={{
+          fontSize: 7, fontFamily: 'var(--font-mono)', color: accent, opacity: 0.65,
+          marginTop: 3, animation: blink ? 'led-blink 0.9s ease-in-out infinite' : 'none',
+        }}>{sub}</div>
+      )}
+    </div>
+  )
+}
 
 function stageFromPipeline(pipeline, queue, publishProgress) {
   if (publishProgress?.running) return 3
@@ -91,73 +568,126 @@ function PipelineBar({ pipeline, queue, publishProgress }) {
   const hasError = pipeline?.step === 'error'
   const pct = pipeline?.pct ?? 0
 
-  // Colors: completed = mint, active+running = violet, active+done = mint, future = dim, error = coral
-  const stageColor = (i) => {
-    if (hasError && i === active) return 'var(--coral-500)'
-    if (i < active) return 'var(--mint-500)'
-    if (i === active && isRunning) return 'var(--violet-500)'
-    if (i === active && !isRunning && active >= 0) return 'var(--mint-500)'
-    return 'var(--ink-300)'
+  const STAGE_COLORS = ['#FF00CC', '#00EEFF', '#00FF88', '#FFE600']
+  const nodeColor = (i) => {
+    if (hasError && i === active) return '#FF3060'
+    if (i < active) return '#00FF88'
+    if (i === active && isRunning) return STAGE_COLORS[i]
+    if (i === active) return '#00FF88'
+    return 'rgba(65,58,90,0.45)'
   }
-
-  const stageBg = (i) => {
-    if (hasError && i === active) return 'rgba(255,82,82,0.10)'
-    if (i < active) return 'rgba(34,211,164,0.08)'
-    if (i === active && isRunning) return 'rgba(122,110,142,0.14)'
-    if (i === active && !isRunning && active >= 0) return 'rgba(34,211,164,0.10)'
-    return 'transparent'
-  }
-
-  const lineColor = (i) => i < active ? 'var(--mint-500)' : 'var(--paper-300)'
+  const lineActive = (i) => i < active
 
   return (
     <div style={{
       display: 'flex', alignItems: 'center',
-      padding: '7px 16px', background: 'var(--paper-100)',
-      borderBottom: '1px solid var(--paper-200)', flexShrink: 0, gap: 0,
+      padding: '7px 24px',
+      background: 'rgba(2,3,10,0.99)',
+      borderBottom: '1px solid rgba(255,220,0,0.1)',
+      flexShrink: 0, gap: 0,
+      backgroundImage: 'repeating-linear-gradient(transparent 0px,transparent 3px,rgba(0,0,0,0.1) 3px,rgba(0,0,0,0.1) 4px)',
+      backgroundSize: '100% 4px',
+      boxShadow: '0 2px 20px rgba(0,0,0,0.8)',
     }}>
+
+      {/* HUD label */}
+      <div style={{ display: 'flex', flexDirection: 'column', marginRight: 22, flexShrink: 0, gap: 1 }}>
+        <span style={{ fontSize: 5, fontFamily: 'var(--font-pixel)', color: 'rgba(255,220,0,0.22)', letterSpacing: '0.3em', textTransform: 'uppercase' }}>◈</span>
+        <span style={{ fontSize: 6, fontFamily: 'var(--font-pixel)', color: 'rgba(255,220,0,0.32)', letterSpacing: '0.18em', textTransform: 'uppercase', whiteSpace: 'nowrap', lineHeight: 1.6 }}>FLOOR</span>
+        <span style={{ fontSize: 6, fontFamily: 'var(--font-pixel)', color: 'rgba(255,220,0,0.32)', letterSpacing: '0.18em', textTransform: 'uppercase', whiteSpace: 'nowrap', lineHeight: 1.6 }}>STATUS</span>
+      </div>
+
       {PIPELINE_STAGES.map((stage, i) => (
         <div key={stage} style={{ display: 'flex', alignItems: 'center', flex: i < PIPELINE_STAGES.length - 1 ? 1 : 'none' }}>
+
+          {/* Stage node block */}
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 5,
-            padding: '3px 9px', borderRadius: 99,
-            background: stageBg(i),
-            border: `1px solid ${(i === active) ? stageColor(i) : 'transparent'}`,
-            transition: 'all 0.25s ease',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+            padding: '3px 12px',
+            background: i === active
+              ? `color-mix(in srgb, ${nodeColor(i)} 10%, rgba(1,3,12,0.95))`
+              : 'transparent',
+            border: i === active ? `1px solid color-mix(in srgb, ${nodeColor(i)} 55%, transparent)` : '1px solid transparent',
+            boxShadow: i === active && isRunning
+              ? `0 0 24px color-mix(in srgb, ${nodeColor(i)} 55%, transparent), 0 0 48px color-mix(in srgb, ${nodeColor(i)} 20%, transparent)`
+              : 'none',
+            transition: 'all 0.35s',
           }}>
-            <div style={{
-              width: 6, height: 6, borderRadius: 99, flexShrink: 0,
-              background: stageColor(i),
-              boxShadow: i === active && isRunning ? `0 0 7px ${stageColor(i)}` : 'none',
-              transition: 'background 0.25s, box-shadow 0.25s',
-            }} />
+            {/* Diamond node + ring burst */}
+            <div style={{ position: 'relative', width: 18, height: 18, flexShrink: 0 }}>
+              <div style={{
+                position: 'absolute', top: '50%', left: '50%',
+                transform: 'translate(-50%, -50%) rotate(45deg)',
+                width: i === active ? 11 : 7,
+                height: i === active ? 11 : 7,
+                background: nodeColor(i),
+                boxShadow: (i === active || i < active)
+                  ? `0 0 8px ${nodeColor(i)}, 0 0 18px color-mix(in srgb, ${nodeColor(i)} 45%, transparent)`
+                  : 'none',
+                animation: i === active && isRunning ? 'led-blink 1.2s ease-in-out infinite' : 'none',
+                transition: 'all 0.3s',
+              }} />
+              {i === active && isRunning && (
+                <div style={{
+                  position: 'absolute', top: '50%', left: '50%',
+                  width: 18, height: 18, borderRadius: '50%',
+                  border: `1px solid ${nodeColor(i)}`,
+                  animation: 'node-ring-burst 1.5s ease-out infinite',
+                  pointerEvents: 'none',
+                }} />
+              )}
+            </div>
             <span style={{
-              fontSize: 10, fontWeight: i === active ? 800 : 600,
-              color: stageColor(i), textTransform: 'uppercase', letterSpacing: '0.07em',
-              transition: 'color 0.25s',
+              fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700,
+              color: nodeColor(i), textTransform: 'uppercase', letterSpacing: '0.07em',
+              opacity: i === active ? 1 : i < active ? 0.7 : 0.35,
+              transition: 'color 0.3s, opacity 0.3s',
+              whiteSpace: 'nowrap',
             }}>{stage}</span>
             {i === active && isRunning && (
-              <span style={{ fontSize: 9, color: 'var(--violet-500)', fontFamily: 'var(--font-mono)' }}>{pct}%</span>
+              <span style={{ fontSize: 7, color: STAGE_COLORS[i], fontFamily: 'var(--font-mono)', letterSpacing: '0.05em' }}>{pct}%</span>
             )}
           </div>
+
+          {/* Connecting line */}
           {i < PIPELINE_STAGES.length - 1 && (
             <div style={{
-              flex: 1, height: 1,
-              background: lineColor(i), margin: '0 3px',
-              transition: 'background 0.3s',
-            }} />
+              flex: 1, height: 2, position: 'relative', overflow: 'hidden',
+              background: lineActive(i)
+                ? `linear-gradient(90deg, ${nodeColor(i)}, rgba(0,255,136,0.4))`
+                : 'rgba(45,40,65,0.45)',
+              boxShadow: lineActive(i) ? '0 0 7px rgba(0,255,136,0.55)' : 'none',
+              transition: 'background 0.45s, box-shadow 0.45s',
+            }}>
+              {(i === active - 1 || (i === active && isRunning)) && (
+                <div style={{
+                  position: 'absolute', top: 0, left: 0,
+                  width: 32, height: '100%',
+                  background: `linear-gradient(90deg, transparent, ${STAGE_COLORS[Math.min(i + 1, 3)]}, transparent)`,
+                  boxShadow: `0 0 10px ${STAGE_COLORS[Math.min(i + 1, 3)]}`,
+                  animation: 'corridor-flow 2s ease-in-out infinite',
+                }} />
+              )}
+            </div>
           )}
         </div>
       ))}
-      {/* Status label on the right */}
-      <div style={{ marginLeft: 12, fontSize: 10, color: 'var(--ink-400)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 280 }}>
+
+      {/* Status readout */}
+      <div style={{
+        marginLeft: 20, fontSize: 9, fontFamily: 'var(--font-mono)',
+        color: hasError ? '#FF3060' : isRunning ? '#FF00CC' : active >= 0 ? '#00FF88' : 'rgba(110,100,150,0.38)',
+        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 260,
+        textTransform: 'uppercase', letterSpacing: '0.06em',
+        animation: isRunning ? 'led-blink 2.2s ease-in-out infinite' : 'none',
+      }}>
         {hasError
-          ? <span style={{ color: 'var(--coral-500)' }}>✕ {pipeline.detail}</span>
+          ? `✕ ${pipeline.detail}`
           : isRunning
-            ? <span style={{ color: 'var(--violet-500)' }}>⚙ {pipeline?.detail || publishProgress?.design_name || 'Running…'}</span>
+            ? `⟳ ${pipeline?.detail || publishProgress?.design_name || 'running…'}`
             : active >= 0
-              ? <span style={{ color: 'var(--mint-500)' }}>✓ {PIPELINE_STAGES[active]} complete{active === 2 && queue.length > 0 ? ` — ${queue.length} to review` : ''}</span>
-              : <span style={{ color: 'var(--ink-300)' }}>Ready — give ELLIE a command to start</span>
+              ? `✓ ${PIPELINE_STAGES[active]}${active === 2 && queue.length > 0 ? ` — ${queue.length} pending` : ''}`
+              : '— standby —'
         }
       </div>
     </div>
@@ -1066,40 +1596,227 @@ function TreasuryRoom({ spend }) {
   )
 }
 
-// ── Compact dashboard card ────────────────────────────────────────────────────
-function CompactCard({ id, icon, name, status, accent = 'var(--violet-500)', badge, onExpand, children }) {
+// ── Map room zone — hover highlight + clickable overlay on the RPG map ────────
+function MapRoomZone({ room, isOnline, isAlert, onClick }) {
   const [hov, setHov] = useState(false)
+
+  return (
+    <>
+      {/* Invisible hit zone that lights up on hover */}
+      <div
+        onClick={onClick}
+        onMouseEnter={() => setHov(true)}
+        onMouseLeave={() => setHov(false)}
+        title={`Open ${room.label}`}
+        style={{
+          position: 'absolute',
+          left: room.zoneLeft, top: room.zoneTop,
+          width: room.zoneW, height: room.zoneH,
+          zIndex: 3,
+          cursor: 'pointer',
+          background: hov ? `rgba(${room.accentRgb},0.16)` : `rgba(${room.accentRgb},0.03)`,
+          boxShadow: hov
+            ? `inset 0 0 0 2px rgba(${room.accentRgb},0.75), 0 0 40px rgba(${room.accentRgb},0.18)`
+            : `inset 0 0 0 0.5px rgba(${room.accentRgb},0.15)`,
+          transition: 'background 0.2s, box-shadow 0.2s',
+          borderRadius: 2,
+        }}
+      >
+        {hov && (
+          <div style={{
+            position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)',
+            fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700,
+            color: room.accent, letterSpacing: '0.16em', textTransform: 'uppercase',
+            background: 'rgba(3,4,10,0.92)', border: `1px solid rgba(${room.accentRgb},0.5)`,
+            padding: '3px 10px', borderRadius: 2, whiteSpace: 'nowrap',
+            boxShadow: `0 0 12px rgba(${room.accentRgb},0.35)`,
+          }}>▶ open room</div>
+        )}
+      </div>
+
+      {/* Always-visible floating label chip */}
+      <div style={{
+        position: 'absolute',
+        left: room.chipLeft, top: room.chipTop,
+        transform: 'translateX(-50%)',
+        zIndex: 4, pointerEvents: 'none',
+        display: 'flex', alignItems: 'center', gap: 5,
+        background: 'rgba(3,4,10,0.9)',
+        border: `1px solid rgba(${room.accentRgb},${hov ? '0.7' : '0.38'})`,
+        borderRadius: 3,
+        padding: '3px 8px 3px 6px',
+        backdropFilter: 'blur(6px)',
+        boxShadow: isOnline ? `0 0 12px rgba(${room.accentRgb},0.4)` : 'none',
+        transition: 'border-color 0.2s',
+      }}>
+        <div style={{
+          width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
+          background: isAlert ? '#FF6BA8' : isOnline ? room.accent : 'rgba(80,75,100,0.45)',
+          boxShadow: (isOnline || isAlert) ? `0 0 6px ${room.accent}` : 'none',
+          animation: (isOnline || isAlert) ? 'led-blink 1.8s ease-in-out infinite' : 'none',
+        }} />
+        <span style={{
+          fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700,
+          color: room.accent, textTransform: 'uppercase', letterSpacing: '0.12em',
+          whiteSpace: 'nowrap',
+        }}>{room.label}</span>
+        {isAlert && (
+          <span style={{
+            fontSize: 7, fontFamily: 'var(--font-mono)', fontWeight: 700,
+            color: '#FF6BA8', letterSpacing: '0.06em',
+          }}>!</span>
+        )}
+      </div>
+    </>
+  )
+}
+
+// ── Agent room header — styled like reference image ───────────────────────────
+// Rectangular label box at top of each room zone
+// Matched to original corner layout map
+const AGENT_HEADERS = [
+  { roomId: 'nova',     left: '1%',  top: '1%',  accent: '#22D3A4', accentRgb: '34,211,164',  label: 'AGENT NOVA',     sub: 'TREND RESEARCH' },
+  { roomId: 'activity', left: '71%', top: '1%',  accent: '#48BBFF', accentRgb: '72,187,255',  label: 'AGENT OPS',      sub: 'DATA ANALYSIS' },
+  { roomId: 'forge',    left: '1%',  top: '62%', accent: '#FFB23F', accentRgb: '255,178,63',  label: 'AGENT FORGE',    sub: 'VISUAL DESIGN' },
+  { roomId: 'archives', left: '31%', top: '74%', accent: '#FF6BA8', accentRgb: '255,107,168', label: 'AGENT VAULT',    sub: 'ARCHIVE & PUBLISH' },
+  { roomId: 'treasury', left: '71%', top: '62%', accent: '#FFD600', accentRgb: '255,214,0',   label: 'AGENT TREASURY', sub: 'COST TRACKING' },
+]
+
+function AgentRoomHeader({ cfg, isOnline }) {
+  return (
+    <div style={{
+      position: 'absolute', left: cfg.left, top: cfg.top,
+      zIndex: 4, pointerEvents: 'none',
+      background: 'rgba(1,2,8,0.92)',
+      border: `1.5px solid rgba(${cfg.accentRgb},0.75)`,
+      borderRadius: 3, padding: '5px 10px',
+      backdropFilter: 'blur(8px)',
+      boxShadow: `0 0 16px rgba(${cfg.accentRgb},0.35), inset 0 0 20px rgba(${cfg.accentRgb},0.04)`,
+      minWidth: 130,
+    }}>
+      {/* Corner accent top-left */}
+      <div style={{
+        position: 'absolute', top: 2, left: 2, width: 7, height: 7,
+        borderTop: `1.5px solid ${cfg.accent}`, borderLeft: `1.5px solid ${cfg.accent}`,
+        opacity: 0.7,
+      }} />
+      {/* Corner accent top-right */}
+      <div style={{
+        position: 'absolute', top: 2, right: 2, width: 7, height: 7,
+        borderTop: `1.5px solid ${cfg.accent}`, borderRight: `1.5px solid ${cfg.accent}`,
+        opacity: 0.7,
+      }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{
+          width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
+          background: isOnline ? cfg.accent : 'rgba(80,75,100,0.5)',
+          boxShadow: isOnline ? `0 0 7px ${cfg.accent}` : 'none',
+          animation: isOnline ? 'led-blink 1.4s ease-in-out infinite' : 'none',
+        }} />
+        <div>
+          <div style={{
+            fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700,
+            color: cfg.accent, letterSpacing: '0.14em', textTransform: 'uppercase', lineHeight: 1.3,
+          }}>{cfg.label}</div>
+          <div style={{
+            fontSize: 7, fontFamily: 'var(--font-mono)',
+            color: `rgba(${cfg.accentRgb},0.65)`, letterSpacing: '0.1em', textTransform: 'uppercase', lineHeight: 1.2,
+          }}>STATUS: {isOnline ? 'ACTIVE' : 'STANDBY'} · {cfg.sub}</div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Office room card ───────────────────────────────────────────────────────────
+function CompactCard({ id, name, status, accent = 'var(--violet-500)', badge, onExpand, children, cardStyle = {} }) {
+  const [hov, setHov] = useState(false)
+  const isActive = status === 'online' || status === 'alert'
+  const isCommand = id === 'ellie'
+
   return (
     <div
       onClick={() => onExpand(id)}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        background: 'var(--paper-50)',
-        border: `1.5px solid ${hov ? accent : 'var(--ink-300)'}`,
-        borderRadius: 'var(--radius-lg)',
+        height: '100%',   // fill the absolute-positioned wrapper
+        background: '#04050C',
+        border: `1px solid ${hov
+          ? `color-mix(in srgb, ${accent} 60%, rgba(10,10,18,1))`
+          : isActive
+            ? `color-mix(in srgb, ${accent} 32%, rgba(10,10,18,1))`
+            : 'rgba(255,220,0,0.10)'}`,
+        borderRadius: 4,
         display: 'flex', flexDirection: 'column',
         overflow: 'hidden', cursor: 'pointer',
-        boxShadow: hov ? `0 0 0 3px color-mix(in srgb, ${accent} 15%, transparent)` : 'var(--shadow-sm)',
-        transition: 'border-color 0.12s, box-shadow 0.12s',
-        minHeight: 0,
+        boxShadow: hov
+          ? `0 0 40px color-mix(in srgb, ${accent} 28%, transparent)`
+          : isActive
+            ? `0 0 ${isCommand ? 24 : 12}px color-mix(in srgb, ${accent} ${isCommand ? 18 : 10}%, transparent)`
+            : 'none',
+        transition: 'border-color 0.2s, box-shadow 0.35s',
+        minHeight: 0, position: 'relative',
+        animation: 'module-boot 0.35s ease-out both',
+        ...cardStyle,
       }}
     >
+      {/* HUD corner brackets */}
+      {[['top','left'],['top','right'],['bottom','left'],['bottom','right']].map(([v,h]) => (
+        <div key={v+h} style={{ position: 'absolute', [v]: 0, [h]: 0, width: 12, height: 12,
+          [`border${v.charAt(0).toUpperCase()+v.slice(1)}`]: `2px solid ${accent}`,
+          [`border${h.charAt(0).toUpperCase()+h.slice(1)}`]: `2px solid ${accent}`,
+          opacity: hov ? 1 : 0.45, zIndex: 10, transition: 'opacity 0.2s' }} />
+      ))}
+
+      {/* Room nameplate header */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        padding: '10px 14px',
-        borderBottom: '1px solid var(--paper-200)',
-        background: 'var(--paper-100)',
-        flexShrink: 0,
+        display: 'flex', alignItems: 'center', gap: 7,
+        padding: '6px 12px',
+        borderBottom: `1px solid color-mix(in srgb, ${accent} 18%, rgba(8,8,16,1))`,
+        background: `color-mix(in srgb, ${accent} 9%, rgba(3,4,10,1))`,
+        flexShrink: 0, zIndex: 5, position: 'relative',
       }}>
-        <span style={{ fontSize: 14 }}>{icon}</span>
-        <span style={{ fontWeight: 800, fontSize: 12, color: 'var(--ink-900)', flex: 1, letterSpacing: '-0.01em' }}>{name}</span>
+        <div style={{
+          width: 5, height: 5, borderRadius: 99, flexShrink: 0,
+          background: isActive ? accent : 'rgba(60,58,80,0.45)',
+          boxShadow: isActive ? `0 0 5px ${accent}` : 'none',
+          animation: isActive ? 'led-blink 4s ease-in-out infinite' : 'none',
+        }} />
+        <span style={{
+          fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 9,
+          color: hov ? accent : `color-mix(in srgb, ${accent} 60%, rgba(168,196,232,1))`,
+          flex: 1, textTransform: 'uppercase', letterSpacing: '0.1em',
+          transition: 'color 0.2s',
+        }}>{name}</span>
         {badge}
-        <StatusPill status={status ?? 'offline'} label={status ?? 'offline'} />
-        <span style={{ fontSize: 10, color: accent, fontWeight: 700, opacity: hov ? 1 : 0.35, transition: 'opacity 0.12s' }}>↗</span>
+        {isCommand && (
+          <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700,
+            color: accent, opacity: 0.7, letterSpacing: '0.06em' }}>⚡ exec</span>
+        )}
+        <span style={{
+          fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700,
+          color: hov ? '#E2EDFF' : 'rgba(100,140,200,0.35)',
+          transition: 'color 0.15s', textTransform: 'uppercase', letterSpacing: '0.08em',
+        }}>
+          {hov ? '[ open ]' : status === 'online' ? 'live' : status === 'alert' ? 'attn' : 'stby'}
+        </span>
       </div>
-      <div style={{ flex: 1, padding: '12px 14px', minHeight: 0, overflow: 'hidden' }}>
-        {children}
+
+      {/* Office scene — pixel art room background + character + desk */}
+      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
+        {/* AgentRoom renders: room bg image, character sprite, desk prop */}
+        <AgentRoom agentId={id} active={isActive} />
+
+        {/* Data info overlay — floats above the room scene */}
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, zIndex: 4,
+          padding: '8px 12px 16px',
+          background: 'linear-gradient(180deg, rgba(2,3,8,0.90) 45%, rgba(2,3,8,0) 100%)',
+          pointerEvents: 'none',
+        }}>
+          {children}
+        </div>
       </div>
     </div>
   )
@@ -1118,35 +1835,50 @@ function RoomModal({ icon, title, onClose, wide, visible, children }) {
       style={{
         display: visible ? 'flex' : 'none',
         position: 'fixed', inset: 0, zIndex: 300,
-        background: 'rgba(10,8,15,0.55)',
-        backdropFilter: 'blur(3px)',
+        background: 'rgba(2,4,14,0.82)',
+        backdropFilter: 'blur(8px)',
         alignItems: 'center', justifyContent: 'center',
         padding: 24,
       }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
       <div style={{
-        background: 'var(--paper-50)',
-        border: '1.5px solid var(--ink-300)',
-        borderRadius: 'var(--radius-lg)',
+        background: '#060C1E',
+        border: '1px solid rgba(255,220,0,0.22)',
+        borderRadius: 4,
         width: '100%', maxWidth: wide ? 900 : 680, height: '84vh',
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        boxShadow: '0 24px 80px rgba(0,0,0,0.3)',
+        boxShadow: '0 0 50px rgba(255,220,0,0.06), 0 24px 80px rgba(0,0,0,0.95)',
+        position: 'relative', animation: 'module-boot 0.2s ease-out both',
       }}>
+        {/* Corner brackets */}
+        <div style={{ position: 'absolute', top: 0, left: 0, width: 14, height: 14,
+          borderTop: '2px solid rgba(255,220,0,0.5)', borderLeft: '2px solid rgba(255,220,0,0.5)', zIndex: 5 }} />
+        <div style={{ position: 'absolute', top: 0, right: 0, width: 14, height: 14,
+          borderTop: '2px solid rgba(255,220,0,0.5)', borderRight: '2px solid rgba(255,220,0,0.5)', zIndex: 5 }} />
+        <div style={{ position: 'absolute', bottom: 0, left: 0, width: 14, height: 14,
+          borderBottom: '2px solid rgba(255,220,0,0.5)', borderLeft: '2px solid rgba(255,220,0,0.5)', zIndex: 5 }} />
+        <div style={{ position: 'absolute', bottom: 0, right: 0, width: 14, height: 14,
+          borderBottom: '2px solid rgba(255,220,0,0.5)', borderRight: '2px solid rgba(255,220,0,0.5)', zIndex: 5 }} />
+
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10,
-          padding: '12px 20px',
-          borderBottom: '1px solid var(--paper-200)',
-          background: 'var(--paper-100)', flexShrink: 0,
+          padding: '10px 20px',
+          borderBottom: '1px solid rgba(255,220,0,0.14)',
+          background: 'rgba(5,5,8,0.98)', flexShrink: 0,
         }}>
-          <span style={{ fontSize: 16 }}>{icon}</span>
-          <span style={{ fontWeight: 800, fontSize: 14, color: 'var(--ink-900)', flex: 1 }}>{title}</span>
+          <span style={{ fontSize: 14 }}>{icon}</span>
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 12,
+            color: '#A8C4E8', flex: 1, textTransform: 'uppercase', letterSpacing: '0.08em',
+          }}>{title}</span>
           <button onClick={onClose} style={{
-            background: 'none', border: '1.5px solid var(--ink-300)',
-            borderRadius: 'var(--radius-sm)', color: 'var(--ink-600)',
-            cursor: 'pointer', padding: '4px 14px', fontSize: 12,
-            fontFamily: 'var(--font-ui)', fontWeight: 700,
-          }}>✕ <span style={{ fontSize: 10, opacity: 0.5 }}>Esc</span></button>
+            background: 'rgba(40,70,140,0.18)',
+            border: '1px solid rgba(255,220,0,0.3)',
+            borderRadius: 2, color: 'rgba(255,220,0,0.7)',
+            cursor: 'pointer', padding: '4px 14px', fontSize: 11,
+            fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.06em',
+          }}>[ esc ]</button>
         </div>
         <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
           {children}
@@ -1858,12 +2590,26 @@ export default function BusinessFactory() {
   const pendingCount = queue.length
   const spendToday = spend?.today_usd ?? 0
 
+  // Per-room status for the map chips
+  const roomStatuses = {
+    ellie: (ellieRoomStatus.thinking || (ellieRoomStatus.pipeline ?? elliePipeline)?.running)
+      ? 'online'
+      : (status?.agents?.find(a => a.name === 'ELLIE')?.status ?? 'idle'),
+    nova:     (trends?.trends?.length ?? 0) > 0 ? 'online' : 'idle',
+    activity: status?.agents?.some(a => a.status === 'online') ? 'online' : 'idle',
+    forge:    forgeProgress?.running || queue.length > 0 ? 'online' : 'idle',
+    archives: publishProgress?.running ? 'online' : queue.length > 0 ? 'alert' : 'online',
+    treasury: 'online',
+  }
+
   return (
     <RoomShell
-      title="Business Factory"
+      title="ELLIE Corp HQ"
       gradient="var(--grad-violet)"
-      icon="⚙️"
+      icon="⚡"
       contentStyle={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+      outerStyle={{ background: '#060609' }}
+      headerStyle={{ background: 'rgba(5,5,8,0.98)', borderBottomColor: 'rgba(255,220,0,0.22)' }}
       actions={
         <>
           <StatusPill status={loading ? 'offline' : paused ? 'paused' : 'online'} />
@@ -1877,76 +2623,283 @@ export default function BusinessFactory() {
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-500)' }}>
             ${Number(spendToday).toFixed(2)} today
           </span>
-          <button onClick={() => setShowWorkshop(true)} style={{
-            background: 'rgba(122,110,142,0.1)',
-            border: '1.5px solid var(--violet-500)',
-            borderRadius: 'var(--radius-md)',
-            color: 'var(--violet-500)',
-            fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 'var(--text-sm)',
-            padding: '6px 16px', cursor: 'pointer',
-          }}>⚒ Workshop</button>
-          <button onClick={togglePause} disabled={loading} style={{
-            background: paused ? 'rgba(34,211,164,0.1)' : 'rgba(255,178,63,0.1)',
-            border: `1.5px solid ${paused ? 'var(--mint-500)' : 'var(--amber-500)'}`,
-            borderRadius: 'var(--radius-md)',
-            color: paused ? 'var(--mint-500)' : 'var(--amber-500)',
-            fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 'var(--text-sm)',
-            padding: '6px 16px', cursor: loading ? 'not-allowed' : 'pointer',
-          }}>{paused ? '▶ Resume' : '⏸ Pause'}</button>
+          <GameBtn onClick={() => setShowWorkshop(true)} color="var(--violet-500)">⚒ Workshop</GameBtn>
+          <GameBtn onClick={togglePause} disabled={loading} color={paused ? 'var(--mint-500)' : 'var(--amber-500)'}>
+            {paused ? '▶ Resume' : '⏸ Pause'}
+          </GameBtn>
         </>
       }
     >
       {/* Pipeline stages bar — only shown when active */}
       <PipelineBar pipeline={elliePipeline} queue={queue} publishProgress={publishProgress} />
 
-      {/* Dashboard card grid — equal 3×2 cards, click any to expand */}
+      {/* ── Corp Office — single unified RPG floor map ── */}
       <div style={{
         flex: 1, minHeight: 0,
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
-        gridTemplateRows: 'repeat(2, 1fr)',
-        gap: 12,
-        padding: '12px 16px',
+        position: 'relative',
+        overflow: 'hidden',
+        background: '#030408',
       }}>
-        <CompactCard id="ellie" icon="🧠" name="ELLIE" accent="var(--violet-500)"
-          status={ellieRoomStatus.thinking ? 'online' : (ellieRoomStatus.pipeline ?? elliePipeline)?.running ? 'online' : status?.agents?.find(a => a.name === 'ELLIE')?.status ?? 'idle'}
-          onExpand={setExpanded}>
-          <EllieSummary status={status} pipeline={elliePipeline} roomStatus={ellieRoomStatus} />
-        </CompactCard>
+        {/* The office map IS the floor — one cohesive pixel art building */}
+        <img
+          src="/sprites/office-map.png"
+          alt="ELLIE Corp HQ Floor Plan"
+          draggable={false}
+          style={{
+            position: 'absolute', inset: 0,
+            width: '100%', height: '100%',
+            objectFit: 'fill',
+            imageRendering: 'pixelated',
+            zIndex: 0,
+          }}
+        />
 
-        <CompactCard id="forge" icon="🔨" name="Forge · Design Room" accent="var(--amber-500)"
-          status={forgeProgress?.running ? 'online' : queue.length > 0 ? 'online' : 'idle'}
-          onExpand={setExpanded}>
-          <ForgeSummary queue={queue} progress={forgeProgress} />
-        </CompactCard>
+        {/* Subtle depth overlay */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'rgba(3,4,10,0.18)',
+          zIndex: 1, pointerEvents: 'none',
+        }} />
 
-        <CompactCard id="nova" icon="🔭" name="Nova · Research" accent="var(--mint-500)"
-          status={(trends?.trends?.length ?? 0) > 0 ? 'online' : 'idle'}
-          onExpand={setExpanded}>
-          <NovaSummary trends={trends} />
-        </CompactCard>
+        {/* ── CRT scan-line overlay ── */}
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 2, pointerEvents: 'none',
+          backgroundImage: 'repeating-linear-gradient(transparent 0px, transparent 3px, rgba(0,0,0,0.10) 3px, rgba(0,0,0,0.10) 4px)',
+          backgroundSize: '100% 4px',
+          animation: 'scanline-scroll 0.18s linear infinite',
+        }} />
 
-        <CompactCard id="archives" icon="🗄️" name="Archives" accent="var(--rose-500)"
-          status={publishProgress?.running ? 'online' : queue.length > 0 ? 'alert' : 'online'}
-          badge={queue.length > 0 && (
-            <span style={{ background: 'rgba(255,107,168,0.15)', border: '1px solid var(--rose-500)', borderRadius: 99, color: 'var(--rose-500)', fontSize: 10, fontWeight: 700, padding: '1px 8px' }}>
-              {queue.length}
-            </span>
-          )}
-          onExpand={setExpanded}>
-          <ArchivesSummary queue={queue} publishProgress={publishProgress} />
-        </CompactCard>
+        {/* ── Corridor data beam strips — light traveling along floor conduits ── */}
+        <div style={{ position: 'absolute', inset: 0, zIndex: 2, pointerEvents: 'none', overflow: 'hidden' }}>
+          {/* Horizontal beam 1 — purple, through center corridor */}
+          <div style={{
+            position: 'absolute', top: '46%', left: '-12%',
+            width: '12%', height: 3,
+            background: 'linear-gradient(90deg, transparent, rgba(155,114,255,1), rgba(155,114,255,0.5), transparent)',
+            filter: 'blur(1.5px)',
+            boxShadow: '0 0 12px rgba(155,114,255,0.9), 0 0 24px rgba(155,114,255,0.4)',
+            animation: 'data-beam-h 5.2s ease-in-out infinite',
+          }} />
+          {/* Horizontal beam 2 — teal, offset timing */}
+          <div style={{
+            position: 'absolute', top: '51%', left: '-12%',
+            width: '10%', height: 2,
+            background: 'linear-gradient(90deg, transparent, rgba(34,211,164,0.9), rgba(34,211,164,0.4), transparent)',
+            filter: 'blur(1px)',
+            boxShadow: '0 0 10px rgba(34,211,164,0.7), 0 0 20px rgba(34,211,164,0.3)',
+            animation: 'data-beam-h 7.8s ease-in-out infinite 2.6s',
+          }} />
+          {/* Horizontal beam 3 — yellow, slow */}
+          <div style={{
+            position: 'absolute', top: '49%', left: '-12%',
+            width: '8%', height: 2,
+            background: 'linear-gradient(90deg, transparent, rgba(255,220,0,0.8), rgba(255,220,0,0.3), transparent)',
+            filter: 'blur(1px)',
+            boxShadow: '0 0 8px rgba(255,220,0,0.6)',
+            animation: 'data-beam-h 11.4s ease-in-out infinite 5.1s',
+          }} />
+          {/* Vertical beam 1 — cyan, top to bottom */}
+          <div style={{
+            position: 'absolute', left: '47%', top: '-12%',
+            width: 3, height: '12%',
+            background: 'linear-gradient(180deg, transparent, rgba(72,187,255,1), rgba(72,187,255,0.5), transparent)',
+            filter: 'blur(1.5px)',
+            boxShadow: '0 0 12px rgba(72,187,255,0.9), 0 0 24px rgba(72,187,255,0.4)',
+            animation: 'data-beam-v 6.4s ease-in-out infinite 1.4s',
+          }} />
+          {/* Vertical beam 2 — pink, offset */}
+          <div style={{
+            position: 'absolute', left: '51%', top: '-12%',
+            width: 2, height: '10%',
+            background: 'linear-gradient(180deg, transparent, rgba(255,107,168,0.9), rgba(255,107,168,0.4), transparent)',
+            filter: 'blur(1px)',
+            boxShadow: '0 0 10px rgba(255,107,168,0.7)',
+            animation: 'data-beam-v 9.1s ease-in-out infinite 4.2s',
+          }} />
+          {/* Vertical beam 3 — amber, slow */}
+          <div style={{
+            position: 'absolute', left: '49%', top: '-12%',
+            width: 2, height: '8%',
+            background: 'linear-gradient(180deg, transparent, rgba(255,178,63,0.8), rgba(255,178,63,0.3), transparent)',
+            filter: 'blur(1px)',
+            boxShadow: '0 0 8px rgba(255,178,63,0.6)',
+            animation: 'data-beam-v 13.5s ease-in-out infinite 7.8s',
+          }} />
+        </div>
 
-        <CompactCard id="treasury" icon="💰" name="Treasury" accent="var(--peach-500)"
-          status="online" onExpand={setExpanded}>
-          <TreasurySummary spend={spend} />
-        </CompactCard>
+        {/* ── Room monitor screen glows — data being transferred on terminals ── */}
+        <div style={{ position: 'absolute', inset: 0, zIndex: 2, pointerEvents: 'none', overflow: 'hidden' }}>
+          {/* Nova top-left: research terminal screens */}
+          <div style={{
+            position: 'absolute', left: '4%', top: '7%', width: '15%', height: '9%',
+            background: 'rgba(34,211,164,0.06)',
+            boxShadow: '0 0 24px rgba(34,211,164,0.22), inset 0 0 16px rgba(34,211,164,0.14)',
+            animation: 'monitor-glow 3.4s ease-in-out infinite',
+            borderRadius: 2,
+          }} />
+          {/* Nova sub-monitor (smaller, tighter) */}
+          <div style={{
+            position: 'absolute', left: '6%', top: '20%', width: '10%', height: '6%',
+            background: 'rgba(34,211,164,0.05)',
+            boxShadow: '0 0 16px rgba(34,211,164,0.18), inset 0 0 10px rgba(34,211,164,0.10)',
+            animation: 'monitor-glow 2.1s ease-in-out infinite 1.1s',
+            borderRadius: 2,
+          }} />
+          {/* Activity top-right: analysis screens */}
+          <div style={{
+            position: 'absolute', right: '4%', top: '7%', width: '15%', height: '9%',
+            background: 'rgba(72,187,255,0.06)',
+            boxShadow: '0 0 24px rgba(72,187,255,0.22), inset 0 0 16px rgba(72,187,255,0.14)',
+            animation: 'monitor-glow 2.9s ease-in-out infinite 0.7s',
+            borderRadius: 2,
+          }} />
+          {/* Activity sub-monitor */}
+          <div style={{
+            position: 'absolute', right: '6%', top: '20%', width: '10%', height: '6%',
+            background: 'rgba(72,187,255,0.05)',
+            boxShadow: '0 0 16px rgba(72,187,255,0.18), inset 0 0 10px rgba(72,187,255,0.10)',
+            animation: 'monitor-glow 4.2s ease-in-out infinite 2.2s',
+            borderRadius: 2,
+          }} />
+          {/* Forge bottom-left: design workstation */}
+          <div style={{
+            position: 'absolute', left: '4%', bottom: '7%', width: '15%', height: '9%',
+            background: 'rgba(255,178,63,0.06)',
+            boxShadow: '0 0 24px rgba(255,178,63,0.22), inset 0 0 16px rgba(255,178,63,0.14)',
+            animation: 'monitor-glow 4.6s ease-in-out infinite 1.8s',
+            borderRadius: 2,
+          }} />
+          {/* Forge sub-monitor */}
+          <div style={{
+            position: 'absolute', left: '7%', bottom: '19%', width: '9%', height: '5%',
+            background: 'rgba(255,178,63,0.05)',
+            boxShadow: '0 0 14px rgba(255,178,63,0.16)',
+            animation: 'monitor-glow 2.8s ease-in-out infinite 3.3s',
+            borderRadius: 2,
+          }} />
+          {/* Treasury bottom-right: finance terminals */}
+          <div style={{
+            position: 'absolute', right: '4%', bottom: '7%', width: '15%', height: '9%',
+            background: 'rgba(255,214,0,0.06)',
+            boxShadow: '0 0 24px rgba(255,214,0,0.22), inset 0 0 16px rgba(255,214,0,0.14)',
+            animation: 'monitor-glow 3.8s ease-in-out infinite 2.6s',
+            borderRadius: 2,
+          }} />
+          {/* Treasury sub-monitor */}
+          <div style={{
+            position: 'absolute', right: '7%', bottom: '19%', width: '9%', height: '5%',
+            background: 'rgba(255,214,0,0.05)',
+            boxShadow: '0 0 14px rgba(255,214,0,0.16)',
+            animation: 'monitor-glow 5.1s ease-in-out infinite 0.4s',
+            borderRadius: 2,
+          }} />
+          {/* ELLIE center: leader console glow pulses */}
+          <div style={{
+            position: 'absolute', left: '36%', top: '35%', width: '12%', height: '8%',
+            background: 'rgba(155,114,255,0.05)',
+            boxShadow: '0 0 30px rgba(155,114,255,0.20), inset 0 0 20px rgba(155,114,255,0.10)',
+            animation: 'monitor-glow 2.4s ease-in-out infinite',
+            borderRadius: 3,
+          }} />
+        </div>
 
-        <CompactCard id="activity" icon="📊" name="Activity" accent="var(--sky-500, #38bdf8)"
-          status={status?.agents?.some(a => a.status === 'online') ? 'online' : 'idle'}
-          onExpand={setExpanded}>
-          <ActivitySummary status={status} activity={activity} />
-        </CompactCard>
+        {/* ── Map legend bottom-left (like reference) ── */}
+        <div style={{
+          position: 'absolute', left: '1%', bottom: '1%',
+          zIndex: 4, pointerEvents: 'none',
+          background: 'rgba(1,2,8,0.92)',
+          border: '1.5px solid rgba(34,211,164,0.45)',
+          borderRadius: 3, padding: '5px 10px',
+          backdropFilter: 'blur(8px)',
+          boxShadow: '0 0 16px rgba(34,211,164,0.2)',
+        }}>
+          <div style={{
+            fontSize: 7, fontFamily: 'var(--font-mono)', fontWeight: 700,
+            color: '#22D3A4', letterSpacing: '0.18em', textTransform: 'uppercase',
+            marginBottom: 5, borderBottom: '1px solid rgba(34,211,164,0.25)', paddingBottom: 3,
+          }}>◈ ELLIE CORP — MAP LEGEND</div>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            {[
+              { dot: '#9B72FF', label: 'Leader ELLIE' },
+              { dot: '#22D3A4', label: 'Research' },
+              { dot: '#48BBFF', label: 'Analysis' },
+              { dot: '#FFB23F', label: 'Design' },
+              { dot: '#FF6BA8', label: 'Archive' },
+              { dot: '#FFD600', label: 'Treasury' },
+            ].map(({ dot, label }) => (
+              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: dot, boxShadow: `0 0 5px ${dot}` }} />
+                <span style={{ fontSize: 7, fontFamily: 'var(--font-mono)', color: 'rgba(200,195,230,0.5)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── ELLIE boss at center ── */}
+        <EllieOnMap />
+
+        {/* ── Walking agent sprites ── */}
+        {MAP_SPRITES.map(spr => (
+          <MapWalker
+            key={spr.id}
+            sprite={spr}
+            online={roomStatuses[spr.roomId] === 'online'}
+          />
+        ))}
+
+        {/* ── Live data mini panels per room ── */}
+        <RoomLiveOverlay
+          left="2%" top="28%" accent="#22D3A4" accentRgb="34,211,164"
+          label="NOVA · SIGNALS"
+          value={trends?.trends?.length ?? 0}
+          sub={trends?.trends?.[0]?.keyword}
+        />
+        <RoomLiveOverlay
+          left="73%" top="28%" accent="#48BBFF" accentRgb="72,187,255"
+          label="OPS · AGENTS"
+          value={(status?.agents ?? []).filter(a => a.status === 'online').length + ' live'}
+          sub={(status?.agents ?? []).find(a => a.status === 'online')?.name}
+        />
+        <RoomLiveOverlay
+          left="2%" top="80%" accent="#FFB23F" accentRgb="255,178,63"
+          label="FORGE · QUEUE"
+          value={queue.length}
+          sub={forgeProgress?.running ? `⬡ ${forgeProgress.step ?? 'designing'}…` : null}
+          blink={forgeProgress?.running}
+        />
+        <RoomLiveOverlay
+          left="30%" top="75%" accent="#FF6BA8" accentRgb="255,107,168"
+          label="VAULT · PENDING"
+          value={queue.length}
+          sub={publishProgress?.running ? '↑ publishing…' : null}
+          blink={publishProgress?.running}
+        />
+        <RoomLiveOverlay
+          left="73%" top="80%" accent="#FFD600" accentRgb="255,214,0"
+          label="TREASURY"
+          value={'$' + Number(spend?.today_usd ?? 0).toFixed(2)}
+          sub="today"
+        />
+
+        {/* ── Agent room headers (reference-style labels) ── */}
+        {AGENT_HEADERS.map((cfg, i) => (
+          <AgentRoomHeader
+            key={i}
+            cfg={cfg}
+            isOnline={roomStatuses[cfg.roomId] === 'online'}
+          />
+        ))}
+
+        {/* ── Room click zones + label chips ── */}
+        {MAP_ROOMS.map(room => (
+          <MapRoomZone
+            key={room.id}
+            room={room}
+            isOnline={roomStatuses[room.id] === 'online'}
+            isAlert={roomStatuses[room.id] === 'alert'}
+            onClick={() => setExpanded(room.id)}
+          />
+        ))}
       </div>
 
       {/* Always-mounted room modals — state is preserved when closed */}

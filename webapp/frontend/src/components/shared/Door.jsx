@@ -10,6 +10,7 @@ export default function Door({
   disabled = false,
   statusDots = 0,
   alerts = 0,
+  sceneSrc = null, // optional pixel art background image
 }) {
   const navigate = useNavigate()
 
@@ -50,16 +51,17 @@ export default function Door({
       }}
       onMouseEnter={e => {
         if (!disabled) {
-          e.currentTarget.style.transform = 'translateY(-4px)'
+          e.currentTarget.style.transform = 'translateY(-3px)'
           e.currentTarget.style.boxShadow = 'var(--shadow-pop)'
-          e.currentTarget.style.borderColor = 'var(--ink-300)'
-          e.currentTarget.querySelector('.door-wash').style.opacity = '0.06'
+          e.currentTarget.style.borderColor = 'rgba(255,220,0,0.38)'
+          e.currentTarget.querySelector('.door-wash').style.opacity = '0.10'
         }
       }}
       onMouseLeave={e => {
         if (!disabled) {
           e.currentTarget.style.transform = 'translateY(0)'
           e.currentTarget.style.boxShadow = 'var(--shadow-md)'
+          e.currentTarget.style.borderColor = 'var(--ink-300)'
           e.currentTarget.querySelector('.door-wash').style.opacity = '0'
         }
       }}
@@ -70,52 +72,109 @@ export default function Door({
         if (!disabled) e.currentTarget.style.transform = 'translateY(-4px)'
       }}
     >
-      {/* Gradient hover wash */}
-      <div
-        className="door-wash"
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background: gradient,
-          opacity: 0,
-          transition: 'opacity 0.3s',
-          pointerEvents: 'none',
-          zIndex: 0,
-        }}
-      />
+      {/* Pixel art scene background — when provided, fills the card */}
+      {sceneSrc ? (
+        <>
+          <img
+            src={sceneSrc}
+            alt=""
+            draggable={false}
+            style={{
+              position: 'absolute', inset: 0,
+              width: '100%', height: '100%',
+              objectFit: 'cover',
+              imageRendering: 'pixelated',
+              zIndex: 0,
+              pointerEvents: 'none',
+            }}
+          />
+          {/* Bottom gradient keeps label/description readable */}
+          <div style={{
+            position: 'absolute', bottom: 0, left: 0, right: 0,
+            height: '65%',
+            background: 'linear-gradient(0deg, rgba(4,5,12,0.97) 40%, rgba(4,5,12,0) 100%)',
+            zIndex: 1,
+            pointerEvents: 'none',
+          }} />
+          {/* Top edge gradient for brand tint */}
+          <div style={{
+            position: 'absolute', top: 0, left: 0, right: 0,
+            height: '30%',
+            background: `linear-gradient(180deg, ${gradient.includes('var') ? 'rgba(40,20,80,0.45)' : 'rgba(0,0,0,0.35)'} 0%, transparent 100%)`,
+            zIndex: 1,
+            pointerEvents: 'none',
+          }} />
+        </>
+      ) : (
+        /* Gradient hover wash — only shown when no scene */
+        <div
+          className="door-wash"
+          style={{
+            position: 'absolute', inset: 0,
+            background: gradient,
+            opacity: 0,
+            transition: 'opacity 0.3s',
+            pointerEvents: 'none',
+            zIndex: 0,
+          }}
+        />
+      )}
 
-      {/* Icon area */}
-      <div style={{
-        position: 'relative',
-        zIndex: 1,
-        width: 128,
-        height: 128,
-        borderRadius: 'var(--radius-lg)',
-        background: gradient,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: 52,
-        boxShadow: 'var(--shadow-md)',
-        alignSelf: 'center',
-      }}>
-        {icon}
-      </div>
+      {/* Icon area — small badge top-right when scene present, large centered otherwise */}
+      {sceneSrc ? (
+        <div style={{
+          position: 'relative',
+          zIndex: 2,
+          alignSelf: 'flex-end',
+          width: 44, height: 44,
+          borderRadius: 8,
+          background: gradient,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 22,
+          boxShadow: '0 2px 12px rgba(0,0,0,0.7)',
+          margin: '12px 12px 0 0',
+          flexShrink: 0,
+        }}>
+          {icon}
+        </div>
+      ) : (
+        <div style={{
+          position: 'relative',
+          zIndex: 1,
+          width: 128,
+          height: 128,
+          borderRadius: 'var(--radius-lg)',
+          background: gradient,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 52,
+          boxShadow: 'var(--shadow-md)',
+          alignSelf: 'center',
+        }}>
+          {icon}
+        </div>
+      )}
+
+      {/* Spacer — pushes label/desc to bottom when scene is present */}
+      {sceneSrc && <div style={{ flex: 1 }} />}
 
       {/* Label strip */}
-      <div style={{ position: 'relative', zIndex: 1 }}>
+      <div style={{ position: 'relative', zIndex: 2 }}>
         <PixelLabel gradient={gradient}>{label}</PixelLabel>
       </div>
 
       {/* Description */}
       <p style={{
         position: 'relative',
-        zIndex: 1,
-        color: 'var(--ink-500)',
+        zIndex: 2,
+        color: sceneSrc ? 'rgba(255,255,255,0.55)' : 'var(--ink-500)',
         fontSize: 'var(--text-sm)',
         lineHeight: 1.6,
         margin: 0,
-        flex: 1,
+        flex: sceneSrc ? 0 : 1,
       }}>
         {description}
       </p>
@@ -123,7 +182,7 @@ export default function Door({
       {/* Status row */}
       <div style={{
         position: 'relative',
-        zIndex: 1,
+        zIndex: 2,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',

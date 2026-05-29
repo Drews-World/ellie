@@ -23,7 +23,10 @@ export default function Header() {
     <>
       <header className={styles.header}>
         <div className={styles.left}>
-          <div className={styles.logoIcon}>🐣</div>
+          <div className={styles.logoIcon}>
+            <img src="/sprites/EllieSprite/EllieHeadshot.png" width={32} height={32} alt="ELLIE"
+              style={{ objectFit: 'cover', borderRadius: 4, display: 'block' }} />
+          </div>
           <div>
             <div className={styles.logoName}>ELLIE HUB</div>
             <div className={styles.logoSub}>Executive Life Logic Intelligence Engine</div>

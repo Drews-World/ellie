@@ -327,11 +327,15 @@ export default function EllieChat() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{
-                width: 24, height: 24, borderRadius: 'var(--radius-md)',
-                background: 'var(--grad-sunrise)',
+                width: 28, height: 28, borderRadius: 'var(--radius-sm)',
+                background: 'rgba(155,114,255,0.12)',
+                border: '1.5px solid rgba(155,114,255,0.5)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontFamily: orb, fontSize: 12, color: '#fff', fontWeight: 800,
-              }}>🐣</div>
+                flexShrink: 0,
+              }}>
+                <img src="/sprites/EllieSprite/EllieHeadshot.png" width={22} height={22} alt="ELLIE"
+                  style={{ objectFit: 'cover', borderRadius: 3, display: 'block' }} />
+              </div>
               <span style={{ fontFamily: orb, fontSize: 11, fontWeight: 700, letterSpacing: 2, color: 'var(--ink-700)' }}>ELLIE RESPONSE</span>
               {chatLoading && (
                 <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
@@ -432,14 +436,17 @@ export default function EllieChat() {
 
         {/* ELLIE avatar */}
         <div style={{
-          width: 34, height: 34, flexShrink: 0,
-          background: 'var(--grad-sunrise)',
-          borderRadius: 'var(--radius-md)',
+          width: 36, height: 36, flexShrink: 0,
+          background: 'rgba(3,1,20,0.92)',
+          border: `1.5px solid ${chatLoading ? 'rgba(155,114,255,0.85)' : 'rgba(155,114,255,0.35)'}`,
+          borderRadius: 'var(--radius-sm)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 18,
-          transition: 'all 0.2s',
-          boxShadow: chatLoading ? 'var(--shadow-md)' : 'var(--shadow-sm)',
-        }}>🐣</div>
+          boxShadow: chatLoading ? '0 0 18px rgba(155,114,255,0.55), inset 0 0 12px rgba(155,114,255,0.1)' : '0 0 8px rgba(155,114,255,0.18)',
+          transition: 'box-shadow 0.2s, border-color 0.2s',
+        }}>
+          <img src="/sprites/EllieSprite/EllieHeadshot.png" width={28} height={28} alt="ELLIE"
+            style={{ objectFit: 'cover', borderRadius: 4, display: 'block' }} />
+        </div>
 
         {/* Input */}
         <input

@@ -1,0 +1,36 @@
+{
+  "group_id": null,
+  "states": [
+    {
+      "character": {
+        "id": "8fc3c4d4-da23-4ee6-82d0-208845ce69aa",
+        "name": "angular, menacing, white chrome body with dark biomechanical tendrils, She should be half lifeform, half robot, female, boss character. think ultron from the avengers, groot from marvel, eve from wall-e, alien,robot, plantlike, etc...",
+        "prompt": "angular, menacing, white chrome body with dark biomechanical tendrils, She should be half lifeform, half robot, female, boss character. think ultron from the avengers, groot from marvel, eve from wall-e, alien,robot, plantlike, etc...",
+        "size": {
+          "width": 240,
+          "height": 240
+        },
+        "template_id": "mannequin",
+        "directions": 8,
+        "view": "low top-down",
+        "created_at": "2026-05-29T06:15:54.425263+00:00"
+      },
+      "folder": "angular_menacing_white_chrome_body_with_dark_biome",
+      "frames": {
+        "rotations": {
+          "south": "angular_menacing_white_chrome_body_with_dark_biome/rotations/south.png",
+          "south-east": "angular_menacing_white_chrome_body_with_dark_biome/rotations/south-east.png",
+          "east": "angular_menacing_white_chrome_body_with_dark_biome/rotations/east.png",
+          "north-east": "angular_menacing_white_chrome_body_with_dark_biome/rotations/north-east.png",
+          "north": "angular_menacing_white_chrome_body_with_dark_biome/rotations/north.png",
+          "north-west": "angular_menacing_white_chrome_body_with_dark_biome/rotations/north-west.png",
+          "west": "angular_menacing_white_chrome_body_with_dark_biome/rotations/west.png",
+          "south-west": "angular_menacing_white_chrome_body_with_dark_biome/rotations/south-west.png"
+        },
+        "animations": {}
+      }
+    }
+  ],
+  "export_version": "3.0",
+  "export_date": "2026-05-29T06:22:50.150018"
+}
