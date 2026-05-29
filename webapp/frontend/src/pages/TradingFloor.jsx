@@ -38,24 +38,24 @@ const CHAR = {
   trader: '1eb37793-f1cb-4c5a-a0d8-019a46afa58b',
   risk:   'f3c1eee9-6017-492e-a920-b752dfb082d4',
 }
-// Walk animation IDs — populated after animate_character jobs finish
-// Format: { [charKey]: { [dir]: animId } }
-// TODO: fill these in after Pixellab walk animations complete
+// Walk animation IDs — animation_name used when calling animate_character
+// All 3 humanoid agents use "walk" (walking-8-frames template, 8 dirs each)
+// Bull uses "walk" too once its animation completes
+// CDN URL: ${_PL}/${charId}/animations/${aid}/${dir}/${frameIndex}.png
 const WALK_ANIMS = {
-  quant:  {},
-  bull:   {},
-  trader: {},
-  risk:   {},
+  quant:  'walk',   // queued — processing
+  bull:   null,     // queued after quant finishes
+  trader: null,     // queued after quant finishes
+  risk:   null,     // queued after quant finishes
 }
 
 // Build sprite config for a character
 function mkSprite(key, opts) {
-  const id = CHAR[key]
+  const id  = CHAR[key]
   const idle = _rot(id)
+  const aid  = WALK_ANIMS[key]
   const walkFrames = {}
-  const wd = WALK_ANIMS[key]
   _DIRS.forEach(dir => {
-    const aid = wd[dir]
     walkFrames[dir] = aid ? _anim(id, aid, dir) : []
   })
   return { id, idleFrames: idle, walkFrames, ...opts }
