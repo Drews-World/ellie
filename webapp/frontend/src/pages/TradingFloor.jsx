@@ -2,833 +2,878 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import RoomShell from '../components/shared/RoomShell'
 import api from '../lib/api'
 
-// ── Keyframe injection ────────────────────────────────────────────────────────
+// ── Keyframes ─────────────────────────────────────────────────────────────────
 let _injected = false
 function ensureKeyframes() {
   if (_injected || typeof document === 'undefined') return
   _injected = true
   const s = document.createElement('style')
   s.textContent = `
-    @keyframes tf-scan {
-      0%   { transform: translateY(-100%); }
-      100% { transform: translateY(100vh); }
-    }
-    @keyframes tf-ticker {
-      0%   { transform: translateX(0); }
-      100% { transform: translateX(-50%); }
-    }
-    @keyframes tf-pulse-ring {
-      0%   { opacity: 0.7; transform: scale(0.85); }
-      100% { opacity: 0;   transform: scale(1.7); }
-    }
-    @keyframes tf-boot {
-      from { opacity: 0; transform: translateY(6px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes tf-glow-green {
-      0%, 100% { box-shadow: 0 0 8px rgba(34,211,164,0.4); }
-      50%       { box-shadow: 0 0 20px rgba(34,211,164,0.9); }
-    }
-    @keyframes tf-glow-amber {
-      0%, 100% { box-shadow: 0 0 8px rgba(255,180,0,0.4); }
-      50%       { box-shadow: 0 0 20px rgba(255,180,0,0.9); }
-    }
-    @keyframes tf-flow {
-      0%   { transform: translateX(-120%); opacity: 0; }
-      15%  { opacity: 1; }
-      85%  { opacity: 1; }
-      100% { transform: translateX(220%); opacity: 0; }
-    }
-    @keyframes tf-row-in {
-      from { opacity: 0; transform: translateX(-8px); }
-      to   { opacity: 1; transform: translateX(0); }
-    }
-    .btn-trade {
-      position: relative;
-      font-family: 'JetBrains Mono', monospace;
-      font-weight: 700;
-      font-size: 9px;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      border-radius: 0;
-      cursor: pointer;
-      transition: box-shadow 0.18s, opacity 0.18s;
-    }
-    .btn-trade:disabled { opacity: 0.35; cursor: not-allowed; }
-    .btn-trade .corner {
-      position: absolute; width: 5px; height: 5px; pointer-events: none;
-    }
-    .btn-trade .corner-tl { top: 2px; left: 2px;  border-top: 1.5px solid; border-left: 1.5px solid; }
-    .btn-trade .corner-tr { top: 2px; right: 2px; border-top: 1.5px solid; border-right: 1.5px solid; }
-    .btn-trade .corner-bl { bottom: 2px; left: 2px;  border-bottom: 1.5px solid; border-left: 1.5px solid; }
-    .btn-trade .corner-br { bottom: 2px; right: 2px; border-bottom: 1.5px solid; border-right: 1.5px solid; }
+    @keyframes tf-ticker { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+    @keyframes tf-glow   { 0%,100%{opacity:.55;transform:scale(1)} 50%{opacity:.9;transform:scale(1.08)} }
+    @keyframes tf-float  { 0%,100%{transform:translate(-50%,-50%) translateY(0)} 50%{transform:translate(-50%,-50%) translateY(-6px)} }
+    @keyframes tf-ring   { 0%{opacity:.7;transform:translate(-50%,-50%) scale(.8)} 100%{opacity:0;transform:translate(-50%,-50%) scale(2.1)} }
+    @keyframes tf-boot   { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes tf-flow   { 0%{transform:translateX(-120%);opacity:0} 15%{opacity:1} 85%{opacity:1} 100%{transform:translateX(220%);opacity:0} }
+    @keyframes tf-vine   { 0%,100%{stroke-dashoffset:0} 50%{stroke-dashoffset:-20} }
+    @keyframes tf-scan   { 0%{transform:translateY(0%)} 100%{transform:translateY(300%)} }
+    @keyframes tf-slide-in { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
+    @keyframes tf-node-burst { 0%{opacity:0.7;transform:scale(0.85)} 100%{opacity:0;transform:scale(1.7)} }
+    @keyframes tf-desk-blink { 0%,80%,100%{opacity:1} 90%{opacity:.25} }
   `
   document.head.appendChild(s)
 }
 
+// ── CDN helpers ───────────────────────────────────────────────────────────────
+// Pixellab CDN base — same bucket as Business Factory agents
+const _PL = 'https://backblaze.pixellab.ai/file/pixellab-characters/c44d0e95-f47c-4c39-96ed-91692c3f5537'
+const _DIRS = ['south','east','north','west','south-east','south-west','north-east','north-west']
+const _rot = id => Object.fromEntries(_DIRS.map(d => [d, [`${_PL}/${id}/rotations/${d}.png`]]))
+const _anim = (cid, aid, dir, n=8) => Array.from({length:n},(_,i)=>`${_PL}/${cid}/animations/${aid}/${dir}/${i}.png`)
+
+// ── Character IDs (generation in progress — sprites appear once CDN populates) ─
+const CHAR = {
+  quant:  '79f92340-8c3b-47c7-9c3e-5c591aeb0728',
+  bull:   'd0016e72-bb3a-44c3-acf2-5604fbf666ea',
+  trader: '1eb37793-f1cb-4c5a-a0d8-019a46afa58b',
+  risk:   'f3c1eee9-6017-492e-a920-b752dfb082d4',
+}
+// Walk animation IDs — populated after animate_character jobs finish
+// Format: { [charKey]: { [dir]: animId } }
+// TODO: fill these in after Pixellab walk animations complete
+const WALK_ANIMS = {
+  quant:  {},
+  bull:   {},
+  trader: {},
+  risk:   {},
+}
+
+// Build sprite config for a character
+function mkSprite(key, opts) {
+  const id = CHAR[key]
+  const idle = _rot(id)
+  const walkFrames = {}
+  const wd = WALK_ANIMS[key]
+  _DIRS.forEach(dir => {
+    const aid = wd[dir]
+    walkFrames[dir] = aid ? _anim(id, aid, dir) : []
+  })
+  return { id, idleFrames: idle, walkFrames, ...opts }
+}
+
+// ── Map sprite patrol config ───────────────────────────────────────────────────
+const MOVE_MS = 3000
+const SPRITE_SZ = 'clamp(72px, 7vw, 108px)'
+
+const TF_SPRITES = [
+  mkSprite('quant', {
+    label: 'QUANT · ANALYSIS', taskIcon: '📊', glowColor: '72,187,255',
+    interval: 5800,
+    path: [
+      { x: '9%',  y: '44%' },
+      { x: '18%', y: '38%' },
+      { x: '24%', y: '52%' },
+      { x: '10%', y: '57%' },
+    ],
+  }),
+  mkSprite('trader', {
+    label: 'EXEC · TRADING', taskIcon: '⚡', glowColor: '255,178,63',
+    interval: 4800,
+    path: [
+      { x: '22%', y: '76%' },
+      { x: '38%', y: '80%' },
+      { x: '55%', y: '76%' },
+      { x: '68%', y: '80%' },
+      { x: '52%', y: '72%' },
+    ],
+  }),
+  mkSprite('risk', {
+    label: 'RISK · MONITOR', taskIcon: '🛡️', glowColor: '34,211,164',
+    interval: 6200,
+    path: [
+      { x: '82%', y: '38%' },
+      { x: '90%', y: '44%' },
+      { x: '85%', y: '56%' },
+      { x: '76%', y: '48%' },
+    ],
+  }),
+]
+
+// ── Zone definitions ──────────────────────────────────────────────────────────
+const ZONES = [
+  { id: 'quant',   label: 'QUANT POD',    accent: '#48BBFF', accentRgb: '72,187,255',
+    left: '1%',  top: '26%', w: '31%', h: '42%', chipX: '6%',  chipY: '27%' },
+  { id: 'command', label: 'COMMAND',      accent: '#9B72FF', accentRgb: '155,114,255',
+    left: '33%', top: '22%', w: '34%', h: '46%', chipX: '50%', chipY: '23%' },
+  { id: 'risk',    label: 'RISK DESK',    accent: '#22D3A4', accentRgb: '34,211,164',
+    left: '68%', top: '26%', w: '31%', h: '42%', chipX: '86%', chipY: '27%' },
+  { id: 'exec',    label: 'EXEC BAY',     accent: '#FFB23F', accentRgb: '255,178,63',
+    left: '1%',  top: '69%', w: '98%', h: '26%', chipX: '50%', chipY: '70%' },
+]
+
+// ── Desk grid positions ───────────────────────────────────────────────────────
+const DESKS = [
+  // Quant pod — left side
+  { x: '5%',   y: '33%', color: '72,187,255'  },
+  { x: '16%',  y: '30%', color: '72,187,255'  },
+  { x: '24%',  y: '37%', color: '72,187,255'  },
+  { x: '5%',   y: '52%', color: '72,187,255'  },
+  { x: '18%',  y: '57%', color: '72,187,255'  },
+  { x: '26%',  y: '49%', color: '72,187,255'  },
+  // Risk desk — right side
+  { x: '71%',  y: '33%', color: '34,211,164'  },
+  { x: '82%',  y: '30%', color: '34,211,164'  },
+  { x: '90%',  y: '37%', color: '34,211,164'  },
+  { x: '72%',  y: '52%', color: '34,211,164'  },
+  { x: '83%',  y: '57%', color: '34,211,164'  },
+  { x: '91%',  y: '49%', color: '34,211,164'  },
+  // Execution bay — bottom row
+  { x: '9%',   y: '76%', color: '255,178,63'  },
+  { x: '21%',  y: '79%', color: '255,178,63'  },
+  { x: '33%',  y: '76%', color: '255,178,63'  },
+  { x: '45%',  y: '79%', color: '255,178,63'  },
+  { x: '57%',  y: '76%', color: '255,178,63'  },
+  { x: '69%',  y: '79%', color: '255,178,63'  },
+  { x: '81%',  y: '76%', color: '255,178,63'  },
+  { x: '91%',  y: '79%', color: '255,178,63'  },
+]
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const $ = (v, digits = 2) =>
-  v == null ? '—' : `$${Math.abs(Number(v)).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })}`
-const pct = (v) =>
-  v == null ? '—' : `${Number(v) >= 0 ? '+' : ''}${Number(v).toFixed(2)}%`
-const sign = (v) =>
-  v == null ? '—' : `${Number(v) >= 0 ? '+' : '-'}${$(v)}`
-const signColor = (v, neutral = false) =>
-  v == null ? 'rgba(170,165,220,0.55)' : Number(v) > 0 ? '#22D3A4' : Number(v) < 0 ? '#FF5C72' : neutral ? 'rgba(170,165,220,0.55)' : '#FFB23F'
-
-function timeAgo(ts) {
+function getWalkDir(from, to) {
+  const dx = parseFloat(to.x) - parseFloat(from.x)
+  const dy = parseFloat(to.y) - parseFloat(from.y)
+  const adx = Math.abs(dx), ady = Math.abs(dy)
+  if (adx < 0.5 && ady < 0.5) return 'south'
+  if (adx > ady * 1.6) return dx > 0 ? 'east' : 'west'
+  if (ady > adx * 1.6) return dy > 0 ? 'south' : 'north'
+  if (dx > 0 && dy > 0) return 'south-east'
+  if (dx > 0 && dy < 0) return 'north-east'
+  if (dx < 0 && dy > 0) return 'south-west'
+  return 'north-west'
+}
+const $$ = (v, d=2) => v == null ? '—' : `$${Math.abs(+v).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d})}`
+const signColor = v => v == null ? 'rgba(170,165,220,.55)' : +v > 0 ? '#22D3A4' : +v < 0 ? '#FF5C72' : '#FFB23F'
+const timeAgo = ts => {
   if (!ts) return '—'
-  const d = new Date(ts)
-  const diff = Date.now() - d.getTime()
-  if (diff < 60000) return 'just now'
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
+  const d = Date.now() - new Date(ts).getTime()
+  if (d < 60000) return 'just now'
+  if (d < 3600000) return `${Math.floor(d/60000)}m ago`
+  return `${Math.floor(d/3600000)}h ago`
 }
 
-function fmtTime(ts) {
-  if (!ts) return '—'
-  return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+// ── SVG: Wires and vines from ceiling ─────────────────────────────────────────
+// viewBox 0 0 100 100 with preserveAspectRatio=none → coords are %
+function WiresAndVines() {
+  return (
+    <svg viewBox="0 0 100 100" preserveAspectRatio="none"
+      style={{ position:'absolute', inset:0, width:'100%', height:'100%', pointerEvents:'none', zIndex:2 }}>
+      {/* Main power conduits from corners to ELLIE center */}
+      <path d="M 2 2 C 4 18, 30 28, 48 46"
+        stroke="rgba(255,180,0,0.22)" strokeWidth="0.35" fill="none" strokeDasharray="2 1.5"
+        style={{ animation: 'tf-vine 6s linear infinite' }} />
+      <path d="M 98 2 C 96 18, 70 28, 52 46"
+        stroke="rgba(255,180,0,0.22)" strokeWidth="0.35" fill="none" strokeDasharray="2 1.5"
+        style={{ animation: 'tf-vine 6s linear infinite reverse' }} />
+      {/* Data cables to zone edges */}
+      <path d="M 0 42 C 2 42, 4 44, 31 46"
+        stroke="rgba(72,187,255,0.18)" strokeWidth="0.28" fill="none" strokeDasharray="1.5 2" />
+      <path d="M 100 42 C 98 42, 96 44, 69 46"
+        stroke="rgba(34,211,164,0.18)" strokeWidth="0.28" fill="none" strokeDasharray="1.5 2" />
+      <path d="M 50 100 C 50 95, 50 88, 50 72"
+        stroke="rgba(255,178,63,0.18)" strokeWidth="0.28" fill="none" strokeDasharray="1.5 2" />
+      {/* Organic vines — left wall */}
+      <path d="M 0 6 C 3 10, 1 16, 4 22 C 6 28, 2 34, 5 40"
+        stroke="rgba(50,160,80,0.35)" strokeWidth="0.5" fill="none" />
+      <circle cx="3.5" cy="16" r="0.7" fill="rgba(50,200,80,0.5)" />
+      <circle cx="4.2" cy="28" r="0.9" fill="rgba(50,200,80,0.4)" />
+      <circle cx="4.8" cy="40" r="0.6" fill="rgba(50,200,80,0.45)" />
+      {/* Organic vines — right wall */}
+      <path d="M 100 10 C 97 15, 99 22, 96 28 C 94 34, 98 42, 95 50"
+        stroke="rgba(50,160,80,0.35)" strokeWidth="0.5" fill="none" />
+      <circle cx="96.5" cy="22" r="0.7" fill="rgba(50,200,80,0.5)" />
+      <circle cx="95.2" cy="34" r="0.9" fill="rgba(50,200,80,0.4)" />
+      <circle cx="95.8" cy="50" r="0.6" fill="rgba(50,200,80,0.45)" />
+      {/* Top-center vine cluster (ceiling above jumbotron) */}
+      <path d="M 35 0 C 38 5, 36 10, 40 14"
+        stroke="rgba(50,160,80,0.3)" strokeWidth="0.45" fill="none" />
+      <path d="M 65 0 C 62 5, 64 10, 60 14"
+        stroke="rgba(50,160,80,0.3)" strokeWidth="0.45" fill="none" />
+      <circle cx="40" cy="14" r="0.8" fill="rgba(50,200,80,0.45)" />
+      <circle cx="60" cy="14" r="0.8" fill="rgba(50,200,80,0.45)" />
+      {/* Central amber conduit network (floor-level circuit traces) */}
+      <polyline points="48,46 40,46 40,70 50,70" stroke="rgba(255,180,0,0.12)" strokeWidth="0.2" fill="none" />
+      <polyline points="52,46 60,46 60,70 50,70" stroke="rgba(255,180,0,0.12)" strokeWidth="0.2" fill="none" />
+    </svg>
+  )
 }
 
-// ── Dark panel wrapper ────────────────────────────────────────────────────────
-function Panel({ children, style = {}, accent = 'rgba(255,180,0,0.22)', label, labelColor = '#FFB400', action }) {
+// ── Desk object ───────────────────────────────────────────────────────────────
+function Desk({ x, y, color }) {
+  const [lit, setLit] = useState(Math.random() > 0.3)
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (Math.random() > 0.92) setLit(l => !l)
+    }, 2000)
+    return () => clearInterval(id)
+  }, [])
+
   return (
     <div style={{
-      background: 'rgba(2,3,10,0.97)',
-      border: `1px solid ${accent}`,
-      borderRadius: 0,
-      display: 'flex',
-      flexDirection: 'column',
-      overflow: 'hidden',
-      animation: 'tf-boot 0.35s ease-out both',
-      ...style,
+      position: 'absolute', left: x, top: y,
+      transform: 'translate(-50%,-50%)',
+      width: 40, height: 26, zIndex: 3, pointerEvents: 'none',
     }}>
-      {label && (
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '7px 14px',
-          borderBottom: `1px solid ${accent}`,
-          background: 'rgba(0,0,0,0.4)',
-          flexShrink: 0,
-        }}>
-          <span style={{
-            fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700,
-            color: labelColor, letterSpacing: '0.18em', textTransform: 'uppercase',
-          }}>◈ {label}</span>
-          {action}
-        </div>
-      )}
-      <div style={{ flex: 1, overflow: 'auto' }}>
-        {children}
+      {/* Desk surface */}
+      <div style={{
+        position: 'absolute', inset: 0,
+        background: `rgba(8,10,20,0.95)`,
+        border: `1px solid rgba(${color},0.45)`,
+        boxShadow: lit ? `0 0 10px rgba(${color},0.25), inset 0 0 6px rgba(${color},0.06)` : 'none',
+      }} />
+      {/* Monitors (2 small rects on top edge) */}
+      {[9, 22].map(lx => (
+        <div key={lx} style={{
+          position: 'absolute', left: lx, top: -8, width: 9, height: 7,
+          background: lit ? `rgba(${color},0.7)` : 'rgba(20,20,35,0.9)',
+          border: `0.5px solid rgba(${color},0.5)`,
+          boxShadow: lit ? `0 0 6px rgba(${color},0.6)` : 'none',
+          animation: lit ? 'tf-desk-blink 4s ease-in-out infinite' : 'none',
+        }} />
+      ))}
+      {/* Keyboard strip */}
+      <div style={{
+        position: 'absolute', left: 6, bottom: 3, right: 6, height: 3,
+        background: `rgba(${color},0.12)`,
+        border: `0.5px solid rgba(${color},0.25)`,
+      }} />
+    </div>
+  )
+}
+
+// ── Zone overlay ──────────────────────────────────────────────────────────────
+function ZoneOverlay({ zone, active, onClick }) {
+  return (
+    <div onClick={onClick} style={{
+      position: 'absolute', left: zone.left, top: zone.top, width: zone.w, height: zone.h,
+      border: `1px solid rgba(${zone.accentRgb},${active ? '0.55' : '0.15'})`,
+      background: active ? `rgba(${zone.accentRgb},0.05)` : 'transparent',
+      boxShadow: active ? `inset 0 0 40px rgba(${zone.accentRgb},0.06)` : 'none',
+      cursor: 'pointer', zIndex: 1, transition: 'all 0.25s',
+      borderRadius: 0,
+    }}
+    onMouseEnter={e => { if (!active) e.currentTarget.style.background = `rgba(${zone.accentRgb},0.03)` }}
+    onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
+    />
+  )
+}
+
+// ── Zone chip label ───────────────────────────────────────────────────────────
+function ZoneChip({ zone }) {
+  return (
+    <div style={{
+      position: 'absolute', left: zone.chipX, top: zone.chipY,
+      transform: 'translate(-50%,0)',
+      zIndex: 4, pointerEvents: 'none',
+      background: 'rgba(2,3,10,0.88)',
+      border: `1px solid rgba(${zone.accentRgb},0.5)`,
+      padding: '2px 8px',
+      display: 'flex', alignItems: 'center', gap: 5,
+    }}>
+      <div style={{ width: 4, height: 4, borderRadius: '50%', background: zone.accent, boxShadow: `0 0 5px ${zone.accent}` }} />
+      <span style={{ fontSize: 6, fontFamily: 'var(--font-mono)', fontWeight: 700, color: zone.accent, letterSpacing: '0.18em', textTransform: 'uppercase' }}>
+        {zone.label}
+      </span>
+    </div>
+  )
+}
+
+// ── Live stat mini-overlay ────────────────────────────────────────────────────
+function StatChip({ left, top, label, value, color, blink }) {
+  return (
+    <div style={{
+      position: 'absolute', left, top, zIndex: 4, pointerEvents: 'none',
+      background: 'rgba(2,3,10,0.92)', border: `1px solid rgba(${color},0.45)`,
+      padding: '4px 9px', minWidth: 60, animation: 'tf-boot 0.3s ease-out both',
+      boxShadow: `0 0 14px rgba(${color},0.2)`,
+    }}>
+      <div style={{ fontSize: 6, fontFamily: 'var(--font-mono)', color: `rgba(${color},0.55)`, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{label}</div>
+      <div style={{ fontSize: 14, fontFamily: 'var(--font-mono)', fontWeight: 700, color: `rgb(${color})`, lineHeight: 1.1, animation: blink ? 'tf-desk-blink 2.5s ease-in-out infinite' : 'none' }}>{value}</div>
+    </div>
+  )
+}
+
+// ── MapWalker sprite ──────────────────────────────────────────────────────────
+function MapWalker({ sprite }) {
+  const [posIdx, setPosIdx]     = useState(0)
+  const [walking, setWalking]   = useState(false)
+  const [walkDir, setWalkDir]   = useState('south')
+  const [frameIdx, setFrameIdx] = useState(0)
+  const mountedRef = useRef(true)
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false } }, [])
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!mountedRef.current) return
+      setPosIdx(curr => {
+        const next = (curr + 1) % sprite.path.length
+        setWalkDir(getWalkDir(sprite.path[curr], sprite.path[next]))
+        return next
+      })
+      setWalking(true); setFrameIdx(0)
+      setTimeout(() => { if (mountedRef.current) setWalking(false) }, MOVE_MS - 500)
+    }, sprite.interval)
+    return () => clearInterval(id)
+  }, [sprite.interval, sprite.path])
+
+  useEffect(() => {
+    const dirFrames = walking
+      ? (sprite.walkFrames?.[walkDir] ?? sprite.walkFrames?.south ?? [])
+      : (sprite.idleFrames?.[walkDir] ?? sprite.idleFrames?.south ?? [])
+    if (!dirFrames.length) return
+    const id = setInterval(() => {
+      if (mountedRef.current) setFrameIdx(i => (i + 1) % dirFrames.length)
+    }, walking ? 140 : 400)
+    return () => clearInterval(id)
+  }, [walking, walkDir, sprite.walkFrames, sprite.idleFrames])
+
+  const pos = sprite.path[posIdx]
+  const gc  = sprite.glowColor
+  const dirFrames = walking
+    ? (sprite.walkFrames?.[walkDir] ?? sprite.walkFrames?.south ?? [])
+    : (sprite.idleFrames?.[walkDir] ?? sprite.idleFrames?.south ?? [])
+  const src = dirFrames.length ? dirFrames[frameIdx % dirFrames.length] : null
+
+  return (
+    <div style={{
+      position: 'absolute', left: pos.x, top: pos.y,
+      transform: 'translate(-50%,-50%)', zIndex: 5, pointerEvents: 'none',
+      transition: `left ${MOVE_MS}ms cubic-bezier(.45,0,.55,1), top ${MOVE_MS}ms cubic-bezier(.45,0,.55,1)`,
+    }}>
+      {/* Name chip */}
+      <div style={{
+        position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
+        whiteSpace: 'nowrap', marginBottom: 3,
+        opacity: walking ? 0 : 1, transition: 'opacity 0.4s',
+        background: 'rgba(2,3,8,0.9)',
+        border: `1px solid rgba(${gc},0.6)`,
+        borderRadius: 2, padding: '2px 6px',
+        display: 'flex', alignItems: 'center', gap: 4,
+      }}>
+        <span style={{ fontSize: 10 }}>{sprite.taskIcon}</span>
+        <span style={{ fontSize: 6, fontFamily: 'var(--font-mono)', fontWeight: 700, color: `rgb(${gc})`, letterSpacing: '0.1em', textTransform: 'uppercase' }}>{sprite.label}</span>
+        <span style={{ width: 4, height: 4, borderRadius: '50%', background: `rgb(${gc})`, boxShadow: `0 0 5px rgb(${gc})`, display: 'inline-block', animation: 'led-blink 1.2s ease-in-out infinite' }} />
+      </div>
+      {/* Sprite container */}
+      <div style={{ width: SPRITE_SZ, height: SPRITE_SZ, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ position: 'absolute', bottom: -4, left: '50%', transform: 'translateX(-50%)', width: '140%', height: 10, background: `radial-gradient(ellipse, rgba(${gc},0.4) 0%, transparent 70%)`, borderRadius: '50%' }} />
+        {src && (
+          <img src={src} alt="" draggable={false}
+            style={{ width: '100%', height: '100%', objectFit: 'contain', imageRendering: 'pixelated', display: 'block', filter: `drop-shadow(0 0 5px rgba(${gc},0.8)) drop-shadow(0 2px 6px rgba(${gc},0.4))` }}
+            onError={e => { e.currentTarget.style.display = 'none' }}
+          />
+        )}
       </div>
     </div>
   )
 }
 
-// ── Trade button ──────────────────────────────────────────────────────────────
-function TBtn({ onClick, disabled, color = '#FFB400', children, style = {} }) {
+// ── ELLIE on map ──────────────────────────────────────────────────────────────
+function EllieOnMap() {
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className="btn-trade"
-      style={{
-        background: `color-mix(in srgb, ${color} 10%, rgba(1,2,8,0.95))`,
-        border: `1px solid ${color}`,
-        color,
-        padding: '6px 16px',
-        boxShadow: disabled ? 'none' : `0 0 10px color-mix(in srgb, ${color} 28%, transparent)`,
-        ...style,
-      }}
-      onMouseEnter={e => { if (!disabled) e.currentTarget.style.boxShadow = `0 0 22px color-mix(in srgb, ${color} 65%, transparent)` }}
-      onMouseLeave={e => { if (!disabled) e.currentTarget.style.boxShadow = disabled ? 'none' : `0 0 10px color-mix(in srgb, ${color} 28%, transparent)` }}
-    >
-      <span className="corner corner-tl" style={{ borderColor: color }} />
-      <span className="corner corner-tr" style={{ borderColor: color }} />
-      <span className="corner corner-bl" style={{ borderColor: color }} />
-      <span className="corner corner-br" style={{ borderColor: color }} />
-      {children}
-    </button>
+    <div style={{
+      position: 'absolute', left: '47%', top: '46%',
+      transform: 'translate(-50%,-50%)',
+      zIndex: 6, pointerEvents: 'none',
+      animation: 'tf-float 3.5s ease-in-out infinite',
+    }}>
+      {/* Floor glow pool */}
+      <div style={{
+        position: 'absolute', bottom: -16, left: '50%', transform: 'translateX(-50%)',
+        width: 200, height: 60,
+        background: 'radial-gradient(ellipse, rgba(155,114,255,0.55) 0%, transparent 70%)',
+        animation: 'tf-glow 2.4s ease-in-out infinite', borderRadius: '50%',
+      }} />
+      {/* Pulse rings */}
+      {[0, 1].map(i => (
+        <div key={i} style={{
+          position: 'absolute', top: '50%', left: '50%',
+          width: 80, height: 80, borderRadius: '50%',
+          border: '1px solid rgba(155,114,255,0.6)',
+          animation: `tf-ring 2.2s ease-out ${i * 1.1}s infinite`,
+          pointerEvents: 'none',
+        }} />
+      ))}
+      {/* Name plate */}
+      <div style={{
+        position: 'absolute', top: -26, left: '50%', transform: 'translateX(-50%)',
+        background: 'rgba(2,2,10,0.95)', border: '1px solid rgba(155,114,255,0.7)',
+        padding: '2px 10px', whiteSpace: 'nowrap', boxShadow: '0 0 14px rgba(155,114,255,0.35)',
+      }}>
+        <span style={{ fontSize: 7, fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#9B72FF', letterSpacing: '0.18em', textTransform: 'uppercase' }}>
+          ⬡ ELLIE · COMMAND
+        </span>
+      </div>
+      <img
+        src="/sprites/EllieSprite/angular_menacing_white_chrome_body_with_dark_biome/rotations/south.png"
+        alt="ELLIE" draggable={false}
+        style={{ width: 'clamp(160px,18vw,260px)', height: 'clamp(160px,18vw,260px)', objectFit: 'contain', imageRendering: 'pixelated', display: 'block', position: 'relative', zIndex: 1, filter: 'drop-shadow(0 0 16px rgba(155,114,255,0.9)) drop-shadow(0 0 32px rgba(155,114,255,0.4))' }}
+      />
+    </div>
   )
 }
 
-// ── Top status bar ────────────────────────────────────────────────────────────
-function TradingStatusBar({ snap, loading, onRefresh, refreshing }) {
-  const fund = snap?.fund ?? {}
-  const active = fund.active && !fund.paused
-  const paused = fund.paused
-  const equity = snap?.account?.portfolio_value ?? snap?.account?.equity
-  const pnlToday = snap?.account?.pnl_today
-  const marketOpen = (() => {
-    const now = new Date()
-    const day = now.getDay()
-    const h = now.getHours(), m = now.getMinutes()
-    const mins = h * 60 + m
-    return day >= 1 && day <= 5 && mins >= 570 && mins < 960 // 9:30–16:00 ET (rough UTC-4)
-  })()
+// ── Bull on map (static mascot) ───────────────────────────────────────────────
+function BullOnMap() {
+  const id = CHAR.bull
+  return (
+    <div style={{ position: 'absolute', left: '63%', top: '43%', transform: 'translate(-50%,-50%)', zIndex: 6, pointerEvents: 'none' }}>
+      {/* Glow */}
+      <div style={{ position: 'absolute', bottom: -8, left: '50%', transform: 'translateX(-50%)', width: 100, height: 30, background: 'radial-gradient(ellipse, rgba(255,180,0,0.4) 0%, transparent 70%)', borderRadius: '50%' }} />
+      {/* Name plate */}
+      <div style={{ position: 'absolute', top: -22, left: '50%', transform: 'translateX(-50%)', background: 'rgba(2,2,10,0.95)', border: '1px solid rgba(255,180,0,0.6)', padding: '2px 8px', whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: 6, fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#FFB400', letterSpacing: '0.16em', textTransform: 'uppercase' }}>⬡ THE BULL</span>
+      </div>
+      <img
+        src={`${_PL}/${id}/rotations/south.png`}
+        alt="The Bull" draggable={false}
+        style={{ width: 'clamp(80px,9vw,130px)', height: 'clamp(80px,9vw,130px)', objectFit: 'contain', imageRendering: 'pixelated', display: 'block', filter: 'drop-shadow(0 0 10px rgba(255,180,0,0.8)) drop-shadow(0 2px 12px rgba(255,180,0,0.4))' }}
+        onError={e => { e.currentTarget.style.display = 'none' }}
+      />
+    </div>
+  )
+}
 
-  const fundColor = active ? '#22D3A4' : paused ? '#FFB23F' : '#6460A8'
-  const fundLabel = active ? 'FUND ACTIVE' : paused ? 'FUND PAUSED' : 'FUND OFFLINE'
+// ── Jumbotron (live market display at top) ────────────────────────────────────
+function Jumbotron({ snap, orders, loading }) {
+  const acct      = snap?.account ?? {}
+  const positions = snap?.positions ?? []
+  const equity    = acct.portfolio_value ?? acct.equity
+  const pnl       = acct.pnl_today
+  const pnlPct    = acct.pnl_today_pct
+  const fund      = snap?.fund ?? {}
+  const active    = fund.active && !fund.paused
+
+  // Duplicate positions for seamless ticker scroll
+  const tickerItems = positions.length ? [...positions, ...positions] : []
 
   return (
     <div style={{
-      display: 'flex', alignItems: 'center',
-      padding: '7px 24px',
-      background: 'rgba(1,2,8,0.99)',
-      borderBottom: '1px solid rgba(255,180,0,0.15)',
-      flexShrink: 0, gap: 0,
-      backgroundImage: 'repeating-linear-gradient(transparent 0px,transparent 3px,rgba(0,0,0,0.12) 3px,rgba(0,0,0,0.12) 4px)',
-      backgroundSize: '100% 4px',
-      boxShadow: '0 2px 24px rgba(0,0,0,0.9)',
+      position: 'absolute', left: '11%', top: '2%', width: '78%', height: '21%',
+      zIndex: 4, background: 'rgba(1,2,8,0.96)',
+      border: '1.5px solid rgba(255,180,0,0.45)',
+      boxShadow: '0 0 40px rgba(255,180,0,0.15), inset 0 0 30px rgba(255,180,0,0.04)',
+      display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      animation: 'tf-boot 0.4s ease-out both',
     }}>
-      {/* ELLIE ident */}
-      <div style={{ display: 'flex', flexDirection: 'column', marginRight: 28, flexShrink: 0, gap: 1 }}>
-        <span style={{ fontSize: 5, fontFamily: 'var(--font-pixel)', color: 'rgba(255,180,0,0.28)', letterSpacing: '0.3em' }}>◈</span>
-        <span style={{ fontSize: 5, fontFamily: 'var(--font-pixel)', color: 'rgba(255,180,0,0.4)', letterSpacing: '0.2em', textTransform: 'uppercase', lineHeight: 1.8 }}>TRADING</span>
-        <span style={{ fontSize: 5, fontFamily: 'var(--font-pixel)', color: 'rgba(255,180,0,0.4)', letterSpacing: '0.2em', textTransform: 'uppercase', lineHeight: 1.8 }}>FLOOR</span>
+      {/* Top label bar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 14px', background: 'rgba(0,0,0,0.5)', borderBottom: '1px solid rgba(255,180,0,0.2)', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 5, height: 5, borderRadius: '50%', background: active ? '#22D3A4' : '#FF5C72', boxShadow: active ? '0 0 6px rgba(34,211,164,0.8)' : 'none', animation: active ? 'led-blink 1.5s ease-in-out infinite' : 'none' }} />
+          <span style={{ fontSize: 6, fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'rgba(255,180,0,0.7)', letterSpacing: '0.2em', textTransform: 'uppercase' }}>
+            ELLIE TRADING FLOOR · MARKET DISPLAY
+          </span>
+        </div>
+        <span style={{ fontSize: 6, fontFamily: 'var(--font-mono)', color: active ? '#22D3A4' : '#FF5C72', fontWeight: 700, letterSpacing: '0.1em' }}>
+          {active ? '● FUND ACTIVE' : fund.paused ? '⏸ PAUSED' : '○ OFFLINE'}
+        </span>
       </div>
 
-      {/* Fund status node */}
-      <div style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-        padding: '4px 16px',
-        background: `color-mix(in srgb, ${fundColor} 8%, rgba(1,3,12,0.98))`,
-        border: `1px solid color-mix(in srgb, ${fundColor} 50%, transparent)`,
-        boxShadow: active ? `0 0 20px color-mix(in srgb, ${fundColor} 45%, transparent)` : 'none',
-      }}>
-        <div style={{ position: 'relative', width: 14, height: 14 }}>
-          <div style={{
-            position: 'absolute', top: '50%', left: '50%',
-            transform: 'translate(-50%,-50%) rotate(45deg)',
-            width: 8, height: 8,
-            background: fundColor,
-            boxShadow: `0 0 8px ${fundColor}`,
-            animation: active ? 'led-blink 1.4s ease-in-out infinite' : 'none',
-          }} />
-          {active && (
-            <div style={{
-              position: 'absolute', top: '50%', left: '50%',
-              width: 16, height: 16, borderRadius: '50%',
-              border: `1px solid ${fundColor}`,
-              animation: 'tf-pulse-ring 1.8s ease-out infinite',
-              pointerEvents: 'none',
-            }} />
+      {/* Main data row */}
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', padding: '0 16px', gap: 24, minHeight: 0 }}>
+        {/* Portfolio value */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
+          <span style={{ fontSize: 6, fontFamily: 'var(--font-mono)', color: 'rgba(255,180,0,0.45)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>Portfolio</span>
+          <span style={{ fontSize: 26, fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#FFB400', lineHeight: 1, animation: 'led-blink 3s ease-in-out infinite' }}>
+            {loading ? '—' : equity != null ? `$${(+equity).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}` : '—'}
+          </span>
+        </div>
+
+        {/* Divider */}
+        <div style={{ width: 1, height: '60%', background: 'rgba(255,180,0,0.2)' }} />
+
+        {/* P&L */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
+          <span style={{ fontSize: 6, fontFamily: 'var(--font-mono)', color: 'rgba(255,180,0,0.45)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>Today P&amp;L</span>
+          <span style={{ fontSize: 20, fontFamily: 'var(--font-mono)', fontWeight: 700, color: signColor(pnl), lineHeight: 1 }}>
+            {loading ? '—' : pnl != null ? `${+pnl>=0?'+':'-'}${$$(pnl)}` : '—'}
+          </span>
+          {pnlPct != null && (
+            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, color: signColor(pnl) }}>
+              {+pnlPct>=0?'+':''}{(+pnlPct).toFixed(2)}%
+            </span>
           )}
         </div>
-        <span style={{ fontSize: 7, fontFamily: 'var(--font-mono)', fontWeight: 700, color: fundColor, letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
-          {fundLabel}
+
+        {/* Divider */}
+        <div style={{ width: 1, height: '60%', background: 'rgba(255,180,0,0.2)' }} />
+
+        {/* Positions count */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
+          <span style={{ fontSize: 6, fontFamily: 'var(--font-mono)', color: 'rgba(255,180,0,0.45)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>Positions</span>
+          <span style={{ fontSize: 20, fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#9B72FF', lineHeight: 1 }}>{positions.length}</span>
+          <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.5)' }}>open</span>
+        </div>
+
+        {/* Spacer */}
+        <div style={{ flex: 1 }} />
+
+        {/* Recent order flashes */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-end', flexShrink: 0, maxWidth: 200 }}>
+          {(orders ?? []).slice(0, 3).map((o, i) => {
+            const isBuy = o.side === 'buy'
+            return (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: 1 - i * 0.3 }}>
+                <span style={{ fontSize: 7, fontFamily: 'var(--font-mono)', fontWeight: 700, color: isBuy ? '#22D3A4' : '#FF5C72' }}>{isBuy ? '▲' : '▼'}</span>
+                <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#E8E4FF' }}>{o.symbol}</span>
+                <span style={{ fontSize: 7, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.5)' }}>{o.status}</span>
+              </div>
+            )
+          })}
+          {!orders?.length && !loading && (
+            <span style={{ fontSize: 7, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.3)' }}>no recent orders</span>
+          )}
+        </div>
+      </div>
+
+      {/* Positions ticker strip at bottom */}
+      {tickerItems.length > 0 && (
+        <div style={{ height: 20, overflow: 'hidden', background: 'rgba(0,0,0,0.4)', borderTop: '1px solid rgba(255,180,0,0.15)', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', height: '100%', width: 'max-content', animation: `tf-ticker ${positions.length * 5}s linear infinite` }}>
+            {tickerItems.map((pos, i) => {
+              const pl = +(pos.unrealized_pl ?? 0)
+              const plpct = +(pos.unrealized_plpc ?? 0) * 100
+              const c = signColor(pl)
+              return (
+                <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '0 16px', borderRight: '1px solid rgba(255,180,0,0.08)', fontFamily: 'var(--font-mono)', fontSize: 8 }}>
+                  <span style={{ color: '#E8E4FF', fontWeight: 700 }}>{pos.symbol}</span>
+                  <span style={{ color: '#FFB400' }}>${(+pos.current_price).toFixed(2)}</span>
+                  <span style={{ color: c, fontWeight: 700 }}>{pl >= 0 ? '▲' : '▼'}{Math.abs(plpct).toFixed(2)}%</span>
+                </span>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Compact status bar ────────────────────────────────────────────────────────
+function StatusBar({ snap, loading, refreshing, onRefresh }) {
+  const fund   = snap?.fund ?? {}
+  const active = fund.active && !fund.paused
+  const acct   = snap?.account ?? {}
+  const cash   = acct.cash
+  const bp     = acct.buying_power
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '6px 24px', background: 'rgba(1,2,8,0.99)', borderBottom: '1px solid rgba(255,180,0,0.18)', flexShrink: 0, backgroundImage: 'repeating-linear-gradient(transparent 0,transparent 3px,rgba(0,0,0,0.1) 3px,rgba(0,0,0,0.1) 4px)', backgroundSize: '100% 4px' }}>
+      <span style={{ fontSize: 7, fontFamily: 'var(--font-mono)', color: 'rgba(255,180,0,0.45)', letterSpacing: '0.2em', textTransform: 'uppercase' }}>ELLIE TRADING FLOOR</span>
+      <div style={{ width: 1, height: 14, background: 'rgba(255,180,0,0.2)' }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ width: 5, height: 5, borderRadius: '50%', background: active ? '#22D3A4' : '#6460A8', boxShadow: active ? '0 0 6px rgba(34,211,164,0.8)' : 'none', animation: active ? 'led-blink 1.5s ease-in-out infinite' : 'none' }} />
+        <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, color: active ? '#22D3A4' : 'rgba(170,165,220,0.45)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+          {active ? 'Fund Active' : fund.paused ? 'Fund Paused' : 'Fund Offline'}
         </span>
       </div>
-
-      {/* Connecting line */}
-      <div style={{ flex: '0 0 20px', height: 2, background: 'rgba(255,180,0,0.3)', position: 'relative', overflow: 'hidden' }}>
-        {active && <div style={{ position: 'absolute', top: 0, left: 0, width: 20, height: '100%', background: 'linear-gradient(90deg, transparent, #22D3A4, transparent)', animation: 'tf-flow 2.2s ease-in-out infinite' }} />}
-      </div>
-
-      {/* Market status */}
-      <div style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-        padding: '4px 12px',
-        border: `1px solid ${marketOpen ? 'rgba(34,211,164,0.4)' : 'rgba(255,92,114,0.25)'}`,
-        background: marketOpen ? 'rgba(34,211,164,0.06)' : 'rgba(255,92,114,0.04)',
-      }}>
-        <div style={{
-          width: 6, height: 6, borderRadius: '50%',
-          background: marketOpen ? '#22D3A4' : '#FF5C72',
-          boxShadow: marketOpen ? '0 0 8px rgba(34,211,164,0.8)' : 'none',
-          animation: marketOpen ? 'led-blink 2s ease-in-out infinite' : 'none',
-        }} />
-        <span style={{ fontSize: 7, fontFamily: 'var(--font-mono)', fontWeight: 700, color: marketOpen ? '#22D3A4' : '#FF5C72', whiteSpace: 'nowrap' }}>
-          {marketOpen ? 'MKT OPEN' : 'MKT CLOSED'}
-        </span>
-      </div>
-
-      {/* Connecting line */}
-      <div style={{ flex: 1, height: 1, background: 'rgba(255,180,0,0.15)', marginLeft: 16, position: 'relative', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', top: 0, left: 0, width: 48, height: '100%', background: 'linear-gradient(90deg, transparent, rgba(255,180,0,0.5), transparent)', animation: 'tf-flow 3s ease-in-out infinite 1s' }} />
-      </div>
-
-      {/* Equity readout */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginLeft: 20, gap: 2 }}>
-        <span style={{ fontSize: 7, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.45)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Portfolio</span>
-        <span style={{ fontSize: 16, fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#FFB400', letterSpacing: '-0.02em', lineHeight: 1 }}>
-          {loading ? '—' : equity != null ? `$${Number(equity).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
-        </span>
-        {pnlToday != null && (
-          <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, color: signColor(pnlToday), animation: 'led-blink 2.5s ease-in-out infinite' }}>
-            {sign(pnlToday)} today
+      {cash != null && (
+        <>
+          <div style={{ width: 1, height: 14, background: 'rgba(255,180,0,0.15)' }} />
+          <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.5)' }}>
+            Cash: <span style={{ color: cash < 0 ? '#FF5C72' : '#48BBFF' }}>{cash < 0 ? '-' : ''}{$$(Math.abs(cash))}</span>
           </span>
-        )}
-      </div>
-
-      {/* Refresh button */}
-      <button
-        onClick={onRefresh}
-        disabled={refreshing}
-        style={{
-          marginLeft: 20, background: 'transparent', border: '1px solid rgba(255,180,0,0.3)',
-          color: refreshing ? 'rgba(255,180,0,0.35)' : 'rgba(255,180,0,0.65)',
-          fontFamily: 'var(--font-mono)', fontSize: 8, padding: '4px 10px', cursor: refreshing ? 'not-allowed' : 'pointer',
-          letterSpacing: '0.1em', textTransform: 'uppercase',
-          transition: 'color 0.15s, border-color 0.15s',
-        }}
-        onMouseEnter={e => { if (!refreshing) { e.currentTarget.style.color = '#FFB400'; e.currentTarget.style.borderColor = 'rgba(255,180,0,0.8)' }}}
-        onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,180,0,0.65)'; e.currentTarget.style.borderColor = 'rgba(255,180,0,0.3)' }}
-      >
+        </>
+      )}
+      {bp != null && (
+        <>
+          <div style={{ width: 1, height: 14, background: 'rgba(255,180,0,0.15)' }} />
+          <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.5)' }}>
+            Buy Power: <span style={{ color: 'rgba(232,228,255,0.7)' }}>{$$(bp)}</span>
+          </span>
+        </>
+      )}
+      <div style={{ flex: 1 }} />
+      <button onClick={onRefresh} disabled={refreshing} style={{ background: 'transparent', border: '1px solid rgba(255,180,0,0.3)', color: refreshing ? 'rgba(255,180,0,0.3)' : 'rgba(255,180,0,0.6)', fontFamily: 'var(--font-mono)', fontSize: 7, padding: '3px 10px', cursor: refreshing ? 'not-allowed' : 'pointer', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
         {refreshing ? '⟳ …' : '⟳ SYNC'}
       </button>
     </div>
   )
 }
 
-// ── KPI card (dark trading style) ─────────────────────────────────────────────
-function TKpi({ label, value, sub, accent = '#FFB400', blink = false, style = {} }) {
-  return (
-    <div style={{
-      background: 'rgba(2,3,10,0.97)',
-      border: `1px solid rgba(${accent === '#22D3A4' ? '34,211,164' : accent === '#FF5C72' ? '255,92,114' : '255,180,0'},0.28)`,
-      flex: 1, minWidth: 130,
-      padding: '14px 18px',
-      display: 'flex', flexDirection: 'column', gap: 5,
-      animation: 'tf-boot 0.3s ease-out both',
-      ...style,
-    }}>
-      <span style={{ fontSize: 7, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.5)', textTransform: 'uppercase', letterSpacing: '0.14em' }}>
-        {label}
-      </span>
-      <span style={{
-        fontSize: 22, fontFamily: 'var(--font-mono)', fontWeight: 700, color: accent, lineHeight: 1.05,
-        animation: blink ? 'led-blink 2.5s ease-in-out infinite' : 'none',
-      }}>
-        {value ?? '—'}
-      </span>
-      {sub && (
-        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.45)' }}>{sub}</span>
-      )}
-    </div>
-  )
-}
-
-// ── Positions table ───────────────────────────────────────────────────────────
-function PositionsTable({ positions, loading }) {
-  if (loading) return (
-    <div style={{ padding: 20, fontSize: 9, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.4)', textAlign: 'center', letterSpacing: '0.1em' }}>
-      ⟳ LOADING POSITIONS…
-    </div>
-  )
-  if (!positions?.length) return (
-    <div style={{ padding: 20, fontSize: 9, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.35)', textAlign: 'center', letterSpacing: '0.08em' }}>
-      — NO OPEN POSITIONS —
-    </div>
-  )
-
-  const cols = ['SYMBOL', 'QTY', 'ENTRY', 'CURRENT', 'MKT VAL', 'P&L', 'P&L %']
-
-  return (
-    <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-        <thead>
-          <tr>
-            {cols.map(c => (
-              <th key={c} style={{
-                padding: '8px 14px', textAlign: 'left',
-                fontSize: 7, fontFamily: 'var(--font-mono)', fontWeight: 700,
-                color: 'rgba(255,180,0,0.5)', textTransform: 'uppercase', letterSpacing: '0.12em',
-                borderBottom: '1px solid rgba(255,180,0,0.15)',
-                whiteSpace: 'nowrap',
-              }}>{c}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {positions.map((pos, i) => {
-            const pl = Number(pos.unrealized_pl ?? pos.unrealized_plpc * pos.market_value ?? 0)
-            const plPct = Number(pos.unrealized_plpc ?? 0) * 100
-            const color = signColor(pl)
-            return (
-              <tr key={pos.symbol ?? i} style={{
-                borderBottom: '1px solid rgba(255,180,0,0.07)',
-                animation: `tf-row-in 0.25s ease-out ${i * 40}ms both`,
-              }}>
-                <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#E8E4FF', fontSize: 12 }}>
-                  {pos.symbol}
-                </td>
-                <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.75)', fontSize: 11 }}>
-                  {Number(pos.qty).toFixed(pos.qty % 1 === 0 ? 0 : 4)}
-                </td>
-                <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.65)', fontSize: 11 }}>
-                  ${Number(pos.avg_entry_price).toFixed(2)}
-                </td>
-                <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.65)', fontSize: 11 }}>
-                  ${Number(pos.current_price).toFixed(2)}
-                </td>
-                <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.55)', fontSize: 11 }}>
-                  ${Number(pos.market_value ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </td>
-                <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontWeight: 700, color, fontSize: 11 }}>
-                  {pl >= 0 ? '+' : '-'}${Math.abs(pl).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </td>
-                <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontWeight: 700, color, fontSize: 11 }}>
-                  {plPct >= 0 ? '+' : ''}{plPct.toFixed(2)}%
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-// ── Orders panel ──────────────────────────────────────────────────────────────
-function OrdersPanel({ orders, loading }) {
-  if (loading) return (
-    <div style={{ padding: 16, fontSize: 9, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.35)', textAlign: 'center' }}>⟳ …</div>
-  )
-  if (!orders?.length) return (
-    <div style={{ padding: 16, fontSize: 9, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.3)', textAlign: 'center' }}>— NO RECENT ORDERS —</div>
-  )
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
-      {orders.slice(0, 12).map((o, i) => {
-        const isBuy  = o.side === 'buy'
-        const status = o.status ?? 'unknown'
-        const statusColor = status === 'filled' ? '#22D3A4' : status === 'canceled' || status === 'rejected' ? '#FF5C72' : '#FFB23F'
-        return (
-          <div key={o.id ?? i} style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            padding: '9px 14px',
-            borderBottom: '1px solid rgba(255,180,0,0.06)',
-            animation: `tf-row-in 0.25s ease-out ${i * 30}ms both`,
-          }}>
-            {/* Side badge */}
-            <div style={{
-              width: 36, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: isBuy ? 'rgba(34,211,164,0.12)' : 'rgba(255,92,114,0.12)',
-              border: `1px solid ${isBuy ? 'rgba(34,211,164,0.5)' : 'rgba(255,92,114,0.5)'}`,
-              fontSize: 7, fontFamily: 'var(--font-mono)', fontWeight: 700,
-              color: isBuy ? '#22D3A4' : '#FF5C72', letterSpacing: '0.08em',
-            }}>
-              {isBuy ? 'BUY' : 'SELL'}
-            </div>
-            {/* Symbol */}
-            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#E8E4FF', fontSize: 11, width: 52, flexShrink: 0 }}>
-              {o.symbol}
-            </span>
-            {/* Qty / notional */}
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'rgba(170,165,220,0.6)', flex: 1 }}>
-              {o.filled_qty ? `${Number(o.filled_qty).toFixed(2)} sh` : o.qty ? `${Number(o.qty).toFixed(2)} sh` : o.notional ? `$${Number(o.notional).toFixed(2)}` : '—'}
-              {o.filled_avg_price ? ` @ $${Number(o.filled_avg_price).toFixed(2)}` : ''}
-            </span>
-            {/* Status */}
-            <span style={{ fontSize: 7, fontFamily: 'var(--font-mono)', fontWeight: 700, color: statusColor, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-              {status}
-            </span>
-            {/* Time */}
-            <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.35)', whiteSpace: 'nowrap' }}>
-              {fmtTime(o.filled_at ?? o.submitted_at)}
-            </span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-// ── Fund control panel ────────────────────────────────────────────────────────
-function FundControl({ fund, loading, onLaunch, onPause, onRefresh }) {
+// ── Zone detail side panel ────────────────────────────────────────────────────
+function ZonePanel({ zone, snap, orders, log, backlog, loading, onClose, onLaunch, onPause }) {
+  const acct      = snap?.account ?? {}
+  const positions = snap?.positions ?? []
+  const fund      = snap?.fund ?? {}
+  const active    = fund.active && !fund.paused
   const [busy, setBusy] = useState(false)
 
-  const handleLaunch = async () => {
-    setBusy(true)
-    try { await onLaunch() } finally { setBusy(false) }
-  }
-  const handlePause = async () => {
-    setBusy(true)
-    try { await onPause() } finally { setBusy(false) }
-  }
-
-  const active = fund?.active && !fund?.paused
-  const paused = fund?.paused
-  const style_label = fund?.investment_style ?? '—'
-  const pos_pct     = fund?.position_pct != null ? `${(fund.position_pct * 100).toFixed(0)}%` : '—'
-  const max_pos_pct = fund?.max_position_pct != null ? `${(fund.max_position_pct * 100).toFixed(0)}%` : '—'
-  const hold_days   = fund?.min_hold_days ?? '—'
-  const weekly_buy  = fund?.weekly_new_buy ? 'YES' : 'NO'
-
-  const infoRows = [
-    ['STYLE',    style_label.toUpperCase()],
-    ['POS SIZE', pos_pct],
-    ['MAX POS',  max_pos_pct],
-    ['MIN HOLD', `${hold_days}d`],
-    ['WEEKLY',   weekly_buy],
-  ]
-
-  return (
-    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {/* Status indicator */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{
-          width: 10, height: 10, borderRadius: '50%',
-          background: active ? '#22D3A4' : paused ? '#FFB23F' : 'rgba(100,96,168,0.45)',
-          boxShadow: active ? '0 0 12px rgba(34,211,164,0.8)' : paused ? '0 0 8px rgba(255,178,63,0.6)' : 'none',
-          animation: active ? 'led-blink 1.5s ease-in-out infinite' : 'none',
-        }} />
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: active ? '#22D3A4' : paused ? '#FFB23F' : 'rgba(170,165,220,0.45)' }}>
-          {loading ? 'CONNECTING…' : active ? 'AUTONOMOUS FUND ACTIVE' : paused ? 'FUND PAUSED' : 'FUND OFFLINE'}
-        </span>
-      </div>
-
-      {/* Config grid */}
-      <div style={{
-        display: 'grid', gridTemplateColumns: '1fr 1fr',
-        gap: 1, background: 'rgba(255,180,0,0.08)',
-        border: '1px solid rgba(255,180,0,0.12)',
-      }}>
-        {infoRows.map(([k, v]) => (
-          <div key={k} style={{
-            display: 'flex', flexDirection: 'column', gap: 2,
-            padding: '8px 12px',
-            background: 'rgba(2,3,10,0.9)',
-            borderRight: '1px solid rgba(255,180,0,0.08)',
-          }}>
-            <span style={{ fontSize: 7, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{k}</span>
-            <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#FFB400' }}>{v}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Action buttons */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {!active && (
-          <TBtn onClick={handleLaunch} disabled={busy || loading} color="#22D3A4">
-            ▶ LAUNCH FUND
-          </TBtn>
-        )}
-        {active && (
-          <TBtn onClick={handlePause} disabled={busy || loading} color="#FFB23F">
-            ⏸ PAUSE FUND
-          </TBtn>
-        )}
-        {paused && (
-          <TBtn onClick={handleLaunch} disabled={busy || loading} color="#22D3A4">
-            ▶ RESUME
-          </TBtn>
-        )}
-      </div>
-
-      {/* Next run times */}
-      {(fund?.next_review || fund?.next_discovery) && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-          <span style={{ fontSize: 7, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.35)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>SCHEDULED</span>
-          {fund.next_review && (
-            <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.55)' }}>
-              Review: <span style={{ color: '#FFB400' }}>{timeAgo(fund.next_review)}</span>
-            </div>
-          )}
-          {fund.next_discovery && (
-            <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.55)' }}>
-              Discovery: <span style={{ color: '#FFB400' }}>{timeAgo(fund.next_discovery)}</span>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Buy backlog panel ─────────────────────────────────────────────────────────
-function BacklogPanel({ backlog, loading, onExecute, onRemove }) {
-  if (loading) return (
-    <div style={{ padding: 16, fontSize: 9, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.35)', textAlign: 'center' }}>⟳ …</div>
-  )
-  if (!backlog?.length) return (
-    <div style={{ padding: 16, fontSize: 9, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.3)', textAlign: 'center' }}>— BACKLOG CLEAR —</div>
-  )
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', padding: '8px 0' }}>
-      {backlog.map((item, i) => (
-        <div key={item.id ?? i} style={{
-          display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px',
-          borderBottom: '1px solid rgba(255,180,0,0.06)',
-          animation: `tf-row-in 0.2s ease-out ${i * 40}ms both`,
-        }}>
-          <div style={{
-            width: 5, height: 5, borderRadius: '50%',
-            background: '#FFB23F', boxShadow: '0 0 6px rgba(255,178,63,0.8)',
-            animation: 'led-blink 1.5s ease-in-out infinite',
-          }} />
-          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 11, color: '#E8E4FF', flex: 1 }}>
-            {item.ticker ?? item.symbol ?? '?'}
-          </span>
-          {item.notional && (
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#FFB400' }}>
-              ${Number(item.notional).toFixed(2)}
-            </span>
-          )}
-          <button
-            onClick={() => onExecute(item.id)}
-            style={{
-              background: 'rgba(34,211,164,0.1)', border: '1px solid rgba(34,211,164,0.45)',
-              color: '#22D3A4', fontFamily: 'var(--font-mono)', fontSize: 7, fontWeight: 700,
-              padding: '3px 8px', cursor: 'pointer', letterSpacing: '0.08em',
-            }}
-          >BUY</button>
-          <button
-            onClick={() => onRemove(item.id)}
-            style={{
-              background: 'transparent', border: '1px solid rgba(255,92,114,0.35)',
-              color: '#FF5C72', fontFamily: 'var(--font-mono)', fontSize: 7, fontWeight: 700,
-              padding: '3px 8px', cursor: 'pointer',
-            }}
-          >✕</button>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// ── Activity log ──────────────────────────────────────────────────────────────
-function ActivityLog({ log, loading }) {
-  if (loading) return (
-    <div style={{ padding: 16, fontSize: 9, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.35)', textAlign: 'center' }}>⟳ …</div>
-  )
-  if (!log?.length) return (
-    <div style={{ padding: 16, fontSize: 9, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.3)', textAlign: 'center' }}>— NO ACTIVITY —</div>
-  )
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
-      {log.slice(0, 20).map((entry, i) => {
-        const type = entry.type ?? entry.action ?? ''
-        const isBuy  = type.toLowerCase().includes('buy')  || type.toLowerCase().includes('purchase')
-        const isSell = type.toLowerCase().includes('sell')
-        const isErr  = type.toLowerCase().includes('error') || type.toLowerCase().includes('fail')
-        const dotColor = isBuy ? '#22D3A4' : isSell ? '#FF5C72' : isErr ? '#FF5C72' : '#FFB400'
-
-        const msg = entry.message ?? entry.detail ?? entry.description ?? JSON.stringify(entry)
-        const ts  = entry.timestamp ?? entry.created_at ?? entry.time
-
-        return (
-          <div key={i} style={{
-            display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 14px',
-            borderBottom: '1px solid rgba(255,180,0,0.05)',
-            animation: `tf-row-in 0.2s ease-out ${i * 25}ms both`,
-          }}>
-            <div style={{ width: 5, height: 5, borderRadius: '50%', background: dotColor, flexShrink: 0, marginTop: 4, boxShadow: `0 0 5px ${dotColor}` }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'rgba(232,228,255,0.8)', lineHeight: 1.4, wordBreak: 'break-word' }}>
-                {msg}
+  const content = {
+    quant: (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+        <div style={{ padding: '8px 14px', fontSize: 8, fontFamily: 'var(--font-mono)', color: 'rgba(72,187,255,0.55)', borderBottom: '1px solid rgba(72,187,255,0.1)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Open Positions</div>
+        {!positions.length
+          ? <div style={{ padding: 16, fontSize: 9, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.35)', textAlign: 'center' }}>— no positions —</div>
+          : positions.map((p, i) => {
+            const pl = +(p.unrealized_pl ?? 0)
+            const plpct = +(p.unrealized_plpc ?? 0) * 100
+            return (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderBottom: '1px solid rgba(72,187,255,0.06)' }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#E8E4FF', fontSize: 11, width: 48, flexShrink: 0 }}>{p.symbol}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'rgba(170,165,220,0.6)', flex: 1 }}>{(+p.qty).toFixed(0)} sh @ ${(+p.avg_entry_price).toFixed(2)}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: signColor(pl) }}>{pl >= 0 ? '+' : '-'}{$$(Math.abs(pl))}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: signColor(pl) }}>{plpct >= 0 ? '+' : ''}{plpct.toFixed(1)}%</span>
               </div>
-              {ts && (
-                <div style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.35)', marginTop: 2 }}>
-                  {timeAgo(ts)}
-                </div>
-              )}
-            </div>
+            )
+          })
+        }
+      </div>
+    ),
+    command: (
+      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {/* Fund state */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: active ? '#22D3A4' : '#6460A8', boxShadow: active ? '0 0 10px rgba(34,211,164,0.8)' : 'none', animation: active ? 'led-blink 1.5s ease-in-out infinite' : 'none' }} />
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: active ? '#22D3A4' : 'rgba(170,165,220,0.45)' }}>
+            {loading ? 'CONNECTING…' : active ? 'FUND ACTIVE' : fund.paused ? 'FUND PAUSED' : 'FUND OFFLINE'}
+          </span>
+        </div>
+        {/* Config rows */}
+        {[
+          ['STYLE', (fund.investment_style ?? '—').toUpperCase()],
+          ['POSITION', fund.position_pct != null ? `${(fund.position_pct*100).toFixed(0)}%` : '—'],
+          ['MAX POS',  fund.max_position_pct != null ? `${(fund.max_position_pct*100).toFixed(0)}%` : '—'],
+          ['MIN HOLD', fund.min_hold_days != null ? `${fund.min_hold_days}d` : '—'],
+        ].map(([k,v]) => (
+          <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid rgba(155,114,255,0.1)' }}>
+            <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.45)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{k}</span>
+            <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#9B72FF' }}>{v}</span>
           </div>
-        )
-      })}
-    </div>
-  )
-}
-
-// ── Quick order form ──────────────────────────────────────────────────────────
-function QuickOrder({ onOrder }) {
-  const [ticker, setTicker] = useState('')
-  const [side, setSide]     = useState('buy')
-  const [amount, setAmount] = useState('')
-  const [mode, setMode]     = useState('notional') // 'notional' | 'qty'
-  const [busy, setBusy]     = useState(false)
-  const [result, setResult] = useState(null)
-
-  const handleSubmit = async () => {
-    if (!ticker.trim() || !amount) return
-    setBusy(true); setResult(null)
-    const payload = {
-      ticker: ticker.trim().toUpperCase(),
-      side,
-      [mode === 'notional' ? 'notional' : 'qty']: Number(amount),
-    }
-    try {
-      const res = await api.post('/trading/orders', payload)
-      setResult({ ok: true, msg: `Order submitted: ${res.data?.id ?? 'success'}` })
-      setTicker(''); setAmount('')
-      onOrder?.()
-    } catch (e) {
-      setResult({ ok: false, msg: e?.response?.data?.detail ?? 'Order failed' })
-    }
-    setBusy(false)
+        ))}
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+          {!active && (
+            <button onClick={async () => { setBusy(true); await onLaunch(); setBusy(false) }} disabled={busy || loading}
+              style={{ background: 'rgba(34,211,164,0.1)', border: '1px solid rgba(34,211,164,0.55)', color: '#22D3A4', fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 8, padding: '7px 14px', cursor: busy || loading ? 'not-allowed' : 'pointer', textTransform: 'uppercase', letterSpacing: '0.1em', opacity: busy || loading ? 0.5 : 1 }}>
+              ▶ LAUNCH
+            </button>
+          )}
+          {active && (
+            <button onClick={async () => { setBusy(true); await onPause(); setBusy(false) }} disabled={busy || loading}
+              style={{ background: 'rgba(255,178,63,0.1)', border: '1px solid rgba(255,178,63,0.55)', color: '#FFB23F', fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 8, padding: '7px 14px', cursor: busy || loading ? 'not-allowed' : 'pointer', textTransform: 'uppercase', letterSpacing: '0.1em', opacity: busy || loading ? 0.5 : 1 }}>
+              ⏸ PAUSE
+            </button>
+          )}
+        </div>
+        {/* Activity log preview */}
+        <div>
+          <div style={{ fontSize: 7, fontFamily: 'var(--font-mono)', color: 'rgba(155,114,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }}>RECENT ACTIVITY</div>
+          {(log ?? []).slice(0, 6).map((e, i) => {
+            const msg = e.message ?? e.detail ?? e.description ?? JSON.stringify(e)
+            const ts  = e.timestamp ?? e.created_at
+            return (
+              <div key={i} style={{ display: 'flex', gap: 8, padding: '5px 0', borderBottom: '1px solid rgba(155,114,255,0.06)' }}>
+                <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#9B72FF', flexShrink: 0, marginTop: 4 }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'rgba(232,228,255,0.75)', lineHeight: 1.4 }}>{msg}</div>
+                  {ts && <div style={{ fontSize: 7, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.3)', marginTop: 1 }}>{timeAgo(ts)}</div>}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    ),
+    risk: (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+        <div style={{ padding: '8px 14px', fontSize: 8, fontFamily: 'var(--font-mono)', color: 'rgba(34,211,164,0.55)', borderBottom: '1px solid rgba(34,211,164,0.1)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Risk Metrics</div>
+        {[
+          ['Cash', acct.cash != null ? (acct.cash < 0 ? `-${$$(Math.abs(acct.cash))}` : $$(acct.cash)) : '—', acct.cash < 0 ? '#FF5C72' : '#48BBFF'],
+          ['Buying Power', acct.buying_power != null ? $$(acct.buying_power) : '—', 'rgba(232,228,255,0.8)'],
+          ['Open Positions', positions.length, '#22D3A4'],
+          ['Backlog Items', backlog?.length ?? 0, backlog?.length > 0 ? '#FFB23F' : 'rgba(170,165,220,0.55)'],
+        ].map(([k,v,c]) => (
+          <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', borderBottom: '1px solid rgba(34,211,164,0.06)' }}>
+            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{k}</span>
+            <span style={{ fontSize: 14, fontFamily: 'var(--font-mono)', fontWeight: 700, color: c }}>{v}</span>
+          </div>
+        ))}
+        {/* Backlog */}
+        {backlog?.length > 0 && (
+          <>
+            <div style={{ padding: '8px 14px', fontSize: 8, fontFamily: 'var(--font-mono)', color: 'rgba(255,178,63,0.55)', borderBottom: '1px solid rgba(255,178,63,0.1)', borderTop: '1px solid rgba(34,211,164,0.08)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Buy Backlog</div>
+            {backlog.slice(0, 5).map((item, i) => (
+              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 14px', borderBottom: '1px solid rgba(255,178,63,0.06)' }}>
+                <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#FFB23F', boxShadow: '0 0 4px rgba(255,178,63,0.7)', animation: 'led-blink 1.5s ease-in-out infinite' }} />
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: '#E8E4FF', flex: 1 }}>{item.ticker ?? item.symbol ?? '?'}</span>
+                {item.notional && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: '#FFB400' }}>${(+item.notional).toFixed(2)}</span>}
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    ),
+    exec: (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+        <div style={{ padding: '8px 14px', fontSize: 8, fontFamily: 'var(--font-mono)', color: 'rgba(255,178,63,0.55)', borderBottom: '1px solid rgba(255,178,63,0.1)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Recent Orders</div>
+        {!(orders ?? []).length
+          ? <div style={{ padding: 16, fontSize: 9, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.35)', textAlign: 'center' }}>— no orders —</div>
+          : (orders ?? []).slice(0, 12).map((o, i) => {
+            const isBuy = o.side === 'buy'
+            const sc = o.status === 'filled' ? '#22D3A4' : o.status === 'canceled' ? '#FF5C72' : '#FFB23F'
+            return (
+              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '9px 14px', borderBottom: '1px solid rgba(255,178,63,0.06)' }}>
+                <div style={{ width: 30, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', background: isBuy ? 'rgba(34,211,164,0.12)' : 'rgba(255,92,114,0.12)', border: `1px solid ${isBuy ? 'rgba(34,211,164,0.5)' : 'rgba(255,92,114,0.5)'}`, fontSize: 6, fontFamily: 'var(--font-mono)', fontWeight: 700, color: isBuy ? '#22D3A4' : '#FF5C72', flexShrink: 0 }}>
+                  {isBuy ? 'BUY' : 'SELL'}
+                </div>
+                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#E8E4FF', fontSize: 10, width: 44, flexShrink: 0 }}>{o.symbol}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'rgba(170,165,220,0.55)', flex: 1 }}>
+                  {o.filled_qty ? `${(+o.filled_qty).toFixed(2)} sh` : o.notional ? `$${(+o.notional).toFixed(0)}` : '—'}
+                </span>
+                <span style={{ fontSize: 7, fontFamily: 'var(--font-mono)', fontWeight: 700, color: sc, textTransform: 'uppercase' }}>{o.status}</span>
+              </div>
+            )
+          })
+        }
+      </div>
+    ),
   }
 
-  return (
-    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* Side toggle */}
-      <div style={{ display: 'flex', gap: 0 }}>
-        {['buy', 'sell'].map(s => (
-          <button key={s} onClick={() => setSide(s)} style={{
-            flex: 1, padding: '8px 0',
-            background: side === s ? (s === 'buy' ? 'rgba(34,211,164,0.18)' : 'rgba(255,92,114,0.18)') : 'rgba(2,3,10,0.6)',
-            border: `1px solid ${side === s ? (s === 'buy' ? 'rgba(34,211,164,0.7)' : 'rgba(255,92,114,0.7)') : 'rgba(255,180,0,0.12)'}`,
-            color: side === s ? (s === 'buy' ? '#22D3A4' : '#FF5C72') : 'rgba(170,165,220,0.4)',
-            fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700,
-            cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.12em',
-          }}>{s}</button>
-        ))}
-      </div>
-
-      {/* Ticker input */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <span style={{ fontSize: 7, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Ticker</span>
-        <input
-          value={ticker}
-          onChange={e => setTicker(e.target.value.toUpperCase())}
-          onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-          placeholder="AAPL"
-          maxLength={6}
-          style={{
-            background: 'rgba(2,3,10,0.8)', border: '1px solid rgba(255,180,0,0.3)',
-            color: '#FFB400', fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700,
-            padding: '7px 10px', borderRadius: 0, outline: 'none', letterSpacing: '0.1em',
-          }}
-        />
-      </div>
-
-      {/* Amount + mode */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 7, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Amount</span>
-          <div style={{ display: 'flex', gap: 0 }}>
-            {[['notional', '$'], ['qty', 'SH']].map(([m, l]) => (
-              <button key={m} onClick={() => setMode(m)} style={{
-                padding: '2px 8px', fontSize: 7,
-                background: mode === m ? 'rgba(255,180,0,0.18)' : 'transparent',
-                border: `1px solid ${mode === m ? 'rgba(255,180,0,0.55)' : 'rgba(255,180,0,0.15)'}`,
-                color: mode === m ? '#FFB400' : 'rgba(170,165,220,0.35)',
-                fontFamily: 'var(--font-mono)', fontWeight: 700, cursor: 'pointer',
-              }}>{l}</button>
-            ))}
-          </div>
-        </div>
-        <input
-          value={amount}
-          onChange={e => setAmount(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-          placeholder={mode === 'notional' ? '1000.00' : '10'}
-          type="number"
-          style={{
-            background: 'rgba(2,3,10,0.8)', border: '1px solid rgba(255,180,0,0.3)',
-            color: '#E8E4FF', fontFamily: 'var(--font-mono)', fontSize: 13,
-            padding: '7px 10px', borderRadius: 0, outline: 'none',
-          }}
-        />
-      </div>
-
-      {/* Submit */}
-      <TBtn
-        onClick={handleSubmit}
-        disabled={busy || !ticker.trim() || !amount}
-        color={side === 'buy' ? '#22D3A4' : '#FF5C72'}
-        style={{ width: '100%', padding: '9px 0', fontSize: 10 }}
-      >
-        {busy ? '⟳ PLACING…' : `${side.toUpperCase()} ${ticker || '—'}`}
-      </TBtn>
-
-      {result && (
-        <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: result.ok ? '#22D3A4' : '#FF5C72', lineHeight: 1.4 }}>
-          {result.ok ? '✓' : '✕'} {result.msg}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Scrolling positions ticker strip ─────────────────────────────────────────
-function TickerStrip({ positions }) {
-  if (!positions?.length) return null
-  // Duplicate for seamless scroll
-  const items = [...positions, ...positions]
   return (
     <div style={{
-      height: 28, overflow: 'hidden',
-      background: 'rgba(0,0,0,0.55)',
-      borderBottom: '1px solid rgba(255,180,0,0.12)',
-      flexShrink: 0,
+      position: 'absolute', right: 0, top: 0, bottom: 0, width: 320,
+      background: 'rgba(1,2,8,0.98)', border: 'none',
+      borderLeft: `1px solid rgba(${zone.accentRgb},0.4)`,
+      zIndex: 20, display: 'flex', flexDirection: 'column',
+      boxShadow: `-20px 0 60px rgba(0,0,0,0.8)`,
+      animation: 'tf-slide-in 0.25s ease-out both',
     }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 0,
-        whiteSpace: 'nowrap',
-        animation: `tf-ticker ${positions.length * 4}s linear infinite`,
-        width: 'max-content',
-        height: '100%',
-      }}>
-        {items.map((pos, i) => {
-          const pl = Number(pos.unrealized_pl ?? 0)
-          const plpct = Number(pos.unrealized_plpc ?? 0) * 100
-          const color = pl > 0 ? '#22D3A4' : pl < 0 ? '#FF5C72' : '#FFB400'
-          return (
-            <span key={i} style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '0 20px',
-              borderRight: '1px solid rgba(255,180,0,0.1)',
-              fontFamily: 'var(--font-mono)', fontSize: 9,
-            }}>
-              <span style={{ color: '#E8E4FF', fontWeight: 700 }}>{pos.symbol}</span>
-              <span style={{ color: '#FFB400' }}>${Number(pos.current_price).toFixed(2)}</span>
-              <span style={{ color, fontWeight: 700 }}>
-                {pl >= 0 ? '▲' : '▼'} {plpct >= 0 ? '+' : ''}{plpct.toFixed(2)}%
-              </span>
-            </span>
-          )
-        })}
+      {/* Panel header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: `1px solid rgba(${zone.accentRgb},0.25)`, background: 'rgba(0,0,0,0.4)', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 6, height: 6, background: zone.accent, boxShadow: `0 0 8px ${zone.accent}` }} />
+          <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, color: zone.accent, textTransform: 'uppercase', letterSpacing: '0.15em' }}>{zone.label}</span>
+        </div>
+        <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'rgba(170,165,220,0.5)', fontSize: 14, cursor: 'pointer', padding: '2px 6px', lineHeight: 1 }}>✕</button>
       </div>
+      {/* Panel body */}
+      <div style={{ flex: 1, overflowY: 'auto' }}>{content[zone.id]}</div>
     </div>
   )
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Main map ──────────────────────────────────────────────────────────────────
+function TradingFloorMap({ snap, orders, log, backlog, loading, selectedZone, onZoneClick }) {
+  const acct = snap?.account ?? {}
+
+  return (
+    <div style={{
+      position: 'relative', flex: 1, overflow: 'hidden',
+      background: 'rgba(2,3,10,0.99)',
+      // Dark circuit-grid floor
+      backgroundImage: [
+        'radial-gradient(ellipse 70% 50% at 50% 48%, rgba(155,114,255,0.06) 0%, transparent 70%)',
+        'radial-gradient(ellipse 80% 25% at 50% 10%, rgba(255,180,0,0.04) 0%, transparent 70%)',
+        'linear-gradient(rgba(255,180,0,0.035) 1px, transparent 1px)',
+        'linear-gradient(90deg, rgba(255,180,0,0.035) 1px, transparent 1px)',
+      ].join(', '),
+      backgroundSize: 'cover, cover, 48px 48px, 48px 48px',
+    }}>
+
+      {/* Zone overlays (clickable) */}
+      {ZONES.map(z => (
+        <ZoneOverlay key={z.id} zone={z} active={selectedZone?.id === z.id} onClick={() => onZoneClick(z)} />
+      ))}
+
+      {/* Zone labels */}
+      {ZONES.map(z => <ZoneChip key={z.id} zone={z} />)}
+
+      {/* SVG wires and vines */}
+      <WiresAndVines />
+
+      {/* Desk objects */}
+      {DESKS.map((d, i) => <Desk key={i} {...d} />)}
+
+      {/* Wall accent strips */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg, transparent, rgba(255,180,0,0.4), rgba(255,180,0,0.6), rgba(255,180,0,0.4), transparent)', pointerEvents: 'none', zIndex: 2 }} />
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, transparent, rgba(255,180,0,0.25), transparent)', pointerEvents: 'none', zIndex: 2 }} />
+      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 2, background: 'linear-gradient(180deg, rgba(255,180,0,0.3), rgba(255,180,0,0.1), rgba(255,180,0,0.3))', pointerEvents: 'none', zIndex: 2 }} />
+      <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 2, background: 'linear-gradient(180deg, rgba(255,180,0,0.3), rgba(255,180,0,0.1), rgba(255,180,0,0.3))', pointerEvents: 'none', zIndex: 2 }} />
+
+      {/* Corner bracket decorations */}
+      {[['top:4px;left:4px;border-top:1px solid;border-left:1px solid','255,180,0'],
+        ['top:4px;right:4px;border-top:1px solid;border-right:1px solid','255,180,0'],
+        ['bottom:4px;left:4px;border-bottom:1px solid;border-left:1px solid','255,180,0'],
+        ['bottom:4px;right:4px;border-bottom:1px solid;border-right:1px solid','255,180,0']].map(([s,c],i) => (
+        <div key={i} style={Object.fromEntries([...s.split(';').map(p => { const [k,v]=p.split(':'); return [k.replace(/-([a-z])/g,(_,c)=>c.toUpperCase()),v] }), ['position','absolute'],['width','18px'],['height','18px'],[`borderColor`,`rgba(${c},0.55)`],['pointerEvents','none'],['zIndex','3']])} />
+      ))}
+
+      {/* Jumbotron (top center) */}
+      <Jumbotron snap={snap} orders={orders} loading={loading} />
+
+      {/* Live stat overlays per zone */}
+      {acct.portfolio_value != null && (
+        <StatChip left="3%" top="26%" label="P&L Today" value={acct.pnl_today != null ? `${acct.pnl_today>=0?'+':'-'}${$$(Math.abs(acct.pnl_today))}` : '—'} color="72,187,255" blink />
+      )}
+      {acct.buying_power != null && (
+        <StatChip left="69%" top="26%" label="Buy Power" value={$$(acct.buying_power)} color="34,211,164" />
+      )}
+      {orders != null && (
+        <StatChip left="1%" top="69.5%" label="Orders Today" value={orders.length} color="255,178,63" />
+      )}
+
+      {/* Character sprites */}
+      {TF_SPRITES.map(s => <MapWalker key={s.id} sprite={s} />)}
+
+      {/* ELLIE at command center */}
+      <EllieOnMap />
+
+      {/* The Bull */}
+      <BullOnMap />
+
+      {/* Scan line overlay */}
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 10, overflow: 'hidden', opacity: 0.03 }}>
+        <div style={{ position: 'absolute', left: 0, right: 0, height: '30%', background: 'linear-gradient(180deg, transparent, rgba(255,255,255,0.8), transparent)', animation: 'tf-scan 8s linear infinite' }} />
+      </div>
+
+      {/* "Click zone to drill down" hint */}
+      {!selectedZone && (
+        <div style={{ position: 'absolute', bottom: 6, right: 10, zIndex: 4, pointerEvents: 'none', fontSize: 7, fontFamily: 'var(--font-mono)', color: 'rgba(170,165,220,0.25)', letterSpacing: '0.1em' }}>
+          CLICK ZONE TO DRILL DOWN
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Root component ────────────────────────────────────────────────────────────
 export default function TradingFloor() {
   ensureKeyframes()
 
-  const [snap, setSnap]         = useState(null)
-  const [orders, setOrders]     = useState(null)
-  const [log, setLog]           = useState(null)
-  const [backlog, setBacklog]   = useState(null)
-  const [loading, setLoading]   = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
-  const [tab, setTab]           = useState('positions') // 'positions' | 'orders'
-  const [rightTab, setRightTab] = useState('fund')       // 'fund' | 'backlog' | 'order'
-  const mountedRef              = useRef(true)
+  const [snap,      setSnap]      = useState(null)
+  const [orders,    setOrders]    = useState(null)
+  const [log,       setLog]       = useState(null)
+  const [backlog,   setBacklog]   = useState(null)
+  const [loading,   setLoading]   = useState(true)
+  const [refreshing,setRefreshing]= useState(false)
+  const [zone,      setZone]      = useState(null)  // selected zone for detail panel
+  const mountedRef = useRef(true)
 
-  useEffect(() => {
-    mountedRef.current = true
-    return () => { mountedRef.current = false }
-  }, [])
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false } }, [])
 
   const fetchAll = useCallback(async (quiet = false) => {
-    if (!quiet) setLoading(true)
-    else setRefreshing(true)
-    try {
-      const [snapRes, ordersRes, logRes, backlogRes] = await Promise.allSettled([
-        api.get('/trading/snapshot'),
-        api.get('/trading/orders'),
-        api.get('/trading/fund/log'),
-        api.get('/trading/fund/backlog'),
-      ])
-      if (!mountedRef.current) return
-      if (snapRes.status === 'fulfilled')    setSnap(snapRes.value.data)
-      if (ordersRes.status === 'fulfilled')  setOrders(ordersRes.value.data)
-      if (logRes.status === 'fulfilled')     setLog(logRes.value.data)
-      if (backlogRes.status === 'fulfilled') setBacklog(backlogRes.value.data)
-    } catch { /* swallow */ } finally {
-      if (mountedRef.current) {
-        setLoading(false)
-        setRefreshing(false)
-      }
-    }
+    if (!quiet) setLoading(true); else setRefreshing(true)
+    const [snapR, ordR, logR, blR] = await Promise.allSettled([
+      api.get('/trading/snapshot'),
+      api.get('/trading/orders'),
+      api.get('/trading/fund/log'),
+      api.get('/trading/fund/backlog'),
+    ])
+    if (!mountedRef.current) return
+    if (snapR.status === 'fulfilled') setSnap(snapR.value.data)
+    if (ordR.status  === 'fulfilled') setOrders(ordR.value.data)
+    if (logR.status  === 'fulfilled') setLog(logR.value.data)
+    if (blR.status   === 'fulfilled') setBacklog(blR.value.data)
+    setLoading(false); setRefreshing(false)
   }, [])
 
   useEffect(() => {
@@ -837,198 +882,36 @@ export default function TradingFloor() {
     return () => clearInterval(id)
   }, [fetchAll])
 
-  const handleLaunch = async () => {
-    await api.post('/trading/fund/launch').catch(() => null)
-    await fetchAll(true)
-  }
-  const handlePause = async () => {
-    await api.post('/trading/fund/pause').catch(() => null)
-    await fetchAll(true)
-  }
-  const handleExecuteBacklog = async (id) => {
-    await api.post(`/trading/fund/backlog/${id}/buy`).catch(() => null)
-    await fetchAll(true)
-  }
-  const handleRemoveBacklog = async (id) => {
-    await api.delete(`/trading/fund/backlog/${id}`).catch(() => null)
-    await fetchAll(true)
-  }
+  const handleLaunch = async () => { await api.post('/trading/fund/launch').catch(()=>null); fetchAll(true) }
+  const handlePause  = async () => { await api.post('/trading/fund/pause').catch(()=>null);  fetchAll(true) }
 
-  // Derived data
-  const account   = snap?.account ?? {}
-  const positions = snap?.positions ?? []
-  const fund      = snap?.fund ?? {}
-
-  const equity      = account.portfolio_value ?? account.equity
-  const pnlToday    = account.pnl_today
-  const pnlTodayPct = account.pnl_today_pct
-  const cash        = account.cash
-  const buyPower    = account.buying_power
-  const totalUnrz   = positions.reduce((sum, p) => sum + Number(p.unrealized_pl ?? 0), 0)
-
-  // Tab styles
-  const tabStyle = (active) => ({
-    padding: '6px 16px', fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700,
-    textTransform: 'uppercase', letterSpacing: '0.12em', cursor: 'pointer',
-    border: 'none', background: 'transparent',
-    color: active ? '#FFB400' : 'rgba(170,165,220,0.4)',
-    borderBottom: active ? '2px solid #FFB400' : '2px solid transparent',
-    transition: 'color 0.15s, border-color 0.15s',
-  })
-  const rtabStyle = (which) => ({
-    ...tabStyle(rightTab === which),
-    fontSize: 7,
-    padding: '5px 12px',
-  })
+  const handleZoneClick = (z) => setZone(prev => prev?.id === z.id ? null : z)
 
   return (
     <RoomShell
       title="Trading Floor"
       gradient="linear-gradient(135deg, #FFB23F 0%, #FF8A66 100%)"
       icon="📈"
-      outerStyle={{
-        background: 'rgba(1,2,8,0.99)',
-        backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(255,180,0,0.03) 39px, rgba(255,180,0,0.03) 40px)',
-      }}
+      outerStyle={{ background: 'rgba(1,2,8,0.99)', backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(255,180,0,0.025) 39px, rgba(255,180,0,0.025) 40px)' }}
       contentStyle={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
-      headerStyle={{
-        background: 'rgba(2,3,10,0.98)',
-        borderBottom: '1px solid rgba(255,180,0,0.25)',
-      }}
+      headerStyle={{ background: 'rgba(2,3,10,0.98)', borderBottom: '1px solid rgba(255,180,0,0.25)' }}
     >
-      {/* Positions ticker strip */}
-      <TickerStrip positions={positions} />
+      <StatusBar snap={snap} loading={loading} refreshing={refreshing} onRefresh={() => fetchAll(true)} />
 
-      {/* Top status bar */}
-      <TradingStatusBar
-        snap={snap}
-        loading={loading}
-        onRefresh={() => fetchAll(true)}
-        refreshing={refreshing}
-      />
-
-      {/* KPI row */}
-      <div style={{
-        display: 'flex', gap: 1, padding: '1px 1px 0',
-        background: 'rgba(255,180,0,0.08)',
-        flexShrink: 0,
-      }}>
-        <TKpi
-          label="Portfolio Value"
-          value={loading ? '—' : equity != null ? `$${Number(equity).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
-          sub="total equity"
-          accent="#FFB400"
+      {/* Map + optional side panel */}
+      <div style={{ flex: 1, position: 'relative', display: 'flex', minHeight: 0 }}>
+        <TradingFloorMap
+          snap={snap} orders={orders} log={log} backlog={backlog}
+          loading={loading} selectedZone={zone} onZoneClick={handleZoneClick}
         />
-        <TKpi
-          label="Today P&L"
-          value={loading ? '—' : pnlToday != null ? `${pnlToday >= 0 ? '+' : '-'}$${Math.abs(pnlToday).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
-          sub={pnlTodayPct != null ? `${pnlTodayPct >= 0 ? '+' : ''}${Number(pnlTodayPct).toFixed(2)}%` : ''}
-          accent={signColor(pnlToday)}
-          blink={pnlToday != null}
-        />
-        <TKpi
-          label="Unrealized P&L"
-          value={loading ? '—' : positions.length ? `${totalUnrz >= 0 ? '+' : '-'}$${Math.abs(totalUnrz).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
-          sub={`${positions.length} open position${positions.length !== 1 ? 's' : ''}`}
-          accent={signColor(totalUnrz)}
-        />
-        <TKpi
-          label="Cash"
-          value={loading ? '—' : cash != null ? `$${Number(Math.abs(cash)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
-          sub={cash < 0 ? 'margin used' : 'available'}
-          accent={cash < 0 ? '#FF5C72' : '#48BBFF'}
-        />
-        <TKpi
-          label="Buying Power"
-          value={loading ? '—' : buyPower != null ? `$${Number(buyPower).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
-          sub="deployable"
-          accent="rgba(170,165,220,0.7)"
-        />
-      </div>
-
-      {/* Main layout — scrollable content */}
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 320px', gap: 1, padding: 1, overflow: 'auto', minHeight: 0 }}>
-
-        {/* Left column */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minHeight: 0 }}>
-
-          {/* Positions / Orders panel */}
-          <Panel
-            label={null}
-            accent="rgba(255,180,0,0.2)"
-            style={{ flex: 2, minHeight: 240 }}
-          >
-            {/* Tab bar */}
-            <div style={{
-              display: 'flex', borderBottom: '1px solid rgba(255,180,0,0.15)',
-              background: 'rgba(0,0,0,0.3)', flexShrink: 0,
-            }}>
-              <button style={tabStyle(tab === 'positions')} onClick={() => setTab('positions')}>
-                Positions {positions.length > 0 ? `(${positions.length})` : ''}
-              </button>
-              <button style={tabStyle(tab === 'orders')} onClick={() => setTab('orders')}>
-                Orders {orders?.length ? `(${orders.length})` : ''}
-              </button>
-            </div>
-
-            {tab === 'positions' && <PositionsTable positions={positions} loading={loading} />}
-            {tab === 'orders'    && <OrdersPanel orders={orders} loading={loading} />}
-          </Panel>
-
-          {/* Activity log */}
-          <Panel
-            label="FUND ACTIVITY LOG"
-            accent="rgba(155,114,255,0.3)"
-            labelColor="#9B72FF"
-            style={{ flex: 1, minHeight: 160 }}
-          >
-            <ActivityLog log={log} loading={loading} />
-          </Panel>
-        </div>
-
-        {/* Right column */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-
-          {/* Right tab bar */}
-          <div style={{
-            display: 'flex',
-            background: 'rgba(2,3,10,0.98)',
-            border: '1px solid rgba(255,180,0,0.18)',
-            borderBottom: 'none', flexShrink: 0,
-          }}>
-            <button style={rtabStyle('fund')}    onClick={() => setRightTab('fund')}>Fund</button>
-            <button style={rtabStyle('backlog')} onClick={() => setRightTab('backlog')}>
-              Backlog {backlog?.length ? `(${backlog.length})` : ''}
-            </button>
-            <button style={rtabStyle('order')}   onClick={() => setRightTab('order')}>Order</button>
-          </div>
-
-          <Panel
-            accent="rgba(255,180,0,0.18)"
-            style={{ flex: 1 }}
-          >
-            {rightTab === 'fund' && (
-              <FundControl
-                fund={fund}
-                loading={loading}
-                onLaunch={handleLaunch}
-                onPause={handlePause}
-                onRefresh={() => fetchAll(true)}
-              />
-            )}
-            {rightTab === 'backlog' && (
-              <BacklogPanel
-                backlog={backlog}
-                loading={loading}
-                onExecute={handleExecuteBacklog}
-                onRemove={handleRemoveBacklog}
-              />
-            )}
-            {rightTab === 'order' && (
-              <QuickOrder onOrder={() => setTimeout(() => fetchAll(true), 1500)} />
-            )}
-          </Panel>
-        </div>
+        {zone && (
+          <ZonePanel
+            zone={zone} snap={snap} orders={orders} log={log} backlog={backlog} loading={loading}
+            onClose={() => setZone(null)}
+            onLaunch={handleLaunch}
+            onPause={handlePause}
+          />
+        )}
       </div>
     </RoomShell>
   )
