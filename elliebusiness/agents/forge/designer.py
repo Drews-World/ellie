@@ -121,7 +121,7 @@ def generate_concepts(niche: str, n: int = 5, products: list[str] | None = None)
     )
 
     try:
-        raw = complete(prompt, system=FORGE_SYSTEM, fast=False, json_mode=True)
+        raw = complete(prompt, system=FORGE_SYSTEM, task="design_copy", json_mode=True)
         data = _parse_json(raw)
         return data.get("concepts", [])
     except Exception as e:
@@ -138,7 +138,7 @@ def score_concept(concept: dict, niche: str) -> float:
         style_memory=style_memory,
     )
     try:
-        raw = complete(prompt, system=SCORE_SYSTEM, fast=True, json_mode=True)
+        raw = complete(prompt, system=SCORE_SYSTEM, task="score", json_mode=True)
         scores = _parse_json(raw)
         return float(scores.get("overall", 0.5))
     except Exception:

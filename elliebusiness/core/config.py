@@ -48,6 +48,13 @@ class Settings(BaseSettings):
     daily_llm_spend_limit_usd: float = 10.0
     daily_image_spend_limit_usd: float = 20.0
 
+    # ── Research integrity ────────────────────────────────────────────────────
+    # When Etsy API + web scrape both fail, Nova can fall back to LLM-generated
+    # ("synthetic") listings. That data is a guess, not real market signal.
+    # Default OFF: Nova refuses rather than pass fabricated data off as real.
+    # Set NOVA_ALLOW_SYNTHETIC=1 to permit it (it will be loudly flagged).
+    nova_allow_synthetic: bool = False
+
     class Config:
         env_file = ".env"
         extra = "ignore"

@@ -193,7 +193,7 @@ Respond with JSON only:
 
     try:
         from core.llm import complete
-        raw = complete(prompt, system="You are a market research assistant. Always respond with valid JSON.", fast=True)
+        raw = complete(prompt, system="You are a market research assistant. Always respond with valid JSON.", task="screen")
         raw = raw.strip()
         fenced = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw)
         if fenced:
@@ -220,21 +220,40 @@ Respond with JSON only:
 
 # ── Public interface ──────────────────────────────────────────────────────────
 
-def scrape_top_listings(niche: str, limit: int = 50) -> list[ListingSignal]:
+# Source tiers, in order of trustworthiness. "llm" is SYNTHETIC — fabricated by
+# the model, not observed market data. Callers must treat it as low-confidence.
+SOURCE_API = "etsy_api"      # real, live Etsy listings
+SOURCE_WEB = "etsy_web"      # real, scraped from Etsy search page
+SOURCE_LLM = "llm_synthetic" # FABRICATED — model's guess, not real signal
+SYNTHETIC_SOURCES = {SOURCE_LLM}
+
+
+def scrape_top_listings_with_source(niche: str, limit: int = 50) -> tuple[list[ListingSignal], str]:
     """
-    Pull top listings for a niche using the best available source.
-    Tier 1: Etsy API (if approved key present)
-    Tier 2: Etsy web scrape (no key needed)
-    Tier 3: LLM market research (always works)
+    Pull top listings for a niche using the best available source, and report
+    WHICH tier produced them so callers can tell real data from fabricated.
+
+    Returns (signals, source) where source is one of SOURCE_API / SOURCE_WEB /
+    SOURCE_LLM. A SOURCE_LLM result is synthetic and must not be presented as
+    observed market data.
     """
     signals = _api_scrape(niche, limit)
     if len(signals) >= 5:
         logger.info(f"Nova: API returned {len(signals)} listings for '{niche}'")
-        return signals
+        return signals, SOURCE_API
 
     signals = _web_scrape(niche, limit)
     if len(signals) >= 5:
-        return signals
+        return signals, SOURCE_WEB
 
-    logger.info(f"Nova: falling back to LLM research for '{niche}'")
-    return _llm_research(niche, n=20)
+    logger.warning(
+        f"Nova: no real listings for '{niche}' — falling back to SYNTHETIC LLM research"
+    )
+    return _llm_research(niche, n=20), SOURCE_LLM
+
+
+def scrape_top_listings(niche: str, limit: int = 50) -> list[ListingSignal]:
+    """Backward-compatible wrapper — returns signals only. Prefer
+    scrape_top_listings_with_source() so you know if the data is real."""
+    signals, _ = scrape_top_listings_with_source(niche, limit)
+    return signals

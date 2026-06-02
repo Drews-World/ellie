@@ -176,7 +176,7 @@ def run_analysis() -> dict:
     )
 
     try:
-        raw = complete(prompt, system=ANALYST_SYSTEM, fast=False, json_mode=True)
+        raw = complete(prompt, system=ANALYST_SYSTEM, task="strategy", json_mode=True)
         raw = raw.strip()
         fenced = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw, re.S)
         if fenced:

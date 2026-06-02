@@ -50,7 +50,7 @@ def generate_digest() -> str:
         return complete(
             DIGEST_PROMPT.format(headlines=raw[:4000]),
             system=DIGEST_SYSTEM,
-            fast=True,
+            task="digest",
         )
     except Exception as e:
         logger.error(f"Nova: news digest failed: {e}")

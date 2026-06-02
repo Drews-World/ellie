@@ -90,7 +90,7 @@ Drew will confirm before anything runs."""
 def parse_command(message: str) -> dict:
     """LLM interprets a natural language instruction into a structured plan."""
     try:
-        raw = complete(COMMAND_PROMPT.format(message=message), system=COMMAND_SYSTEM, fast=False)
+        raw = complete(COMMAND_PROMPT.format(message=message), system=COMMAND_SYSTEM, task="decision")
         raw = raw.strip()
         fenced = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw, re.S)
         if fenced:

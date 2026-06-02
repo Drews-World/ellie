@@ -21,7 +21,12 @@ def _headers(write: bool = False) -> dict[str, str]:
     s = get_settings()
     if not s.etsy_api_key:
         raise RuntimeError("ETSY_API_KEY not set.")
-    h = {"x-api-key": s.etsy_api_key}
+    if not s.etsy_shared_secret:
+        raise RuntimeError("ETSY_SHARED_SECRET not set — Etsy requires x-api-key as 'keystring:shared_secret'.")
+    # Etsy expects the x-api-key header as "keystring:shared_secret", not the
+    # keystring alone. Sending only the keystring returns a misleading
+    # "Shared secret is required in x-api-key header." 403.
+    h = {"x-api-key": f"{s.etsy_api_key}:{s.etsy_shared_secret}"}
     if write:
         if not s.etsy_access_token:
             raise RuntimeError("ETSY_ACCESS_TOKEN not set — complete OAuth flow first.")

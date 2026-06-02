@@ -11,9 +11,15 @@ import json
 import logging
 from datetime import datetime, timezone
 
+from core.config import get_settings
 from core.llm import complete
 from core.supabase_client import get_db
-from .scrapers.etsy import scrape_top_listings, ListingSignal
+from .scrapers.etsy import (
+    scrape_top_listings_with_source,
+    ListingSignal,
+    SYNTHETIC_SOURCES,
+    SOURCE_LLM,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +93,28 @@ def run_research(niche: str, run_id: str | None = None) -> dict | None:
     logger.info(f"Nova: researching niche='{niche}'")
     alog("nova", "research_started", f"Researching niche: '{niche}'", run_id=run_id)
 
-    signals = scrape_top_listings(niche, limit=50)
+    signals, source = scrape_top_listings_with_source(niche, limit=50)
+    is_synthetic = source in SYNTHETIC_SOURCES
+
+    # Guardrail: do not silently pass off fabricated data as real market signal.
+    # When the only data we could get is the LLM's guess, either refuse outright
+    # (default — keeps trends honest) or flag it loudly if explicitly allowed.
+    if is_synthetic:
+        allow = get_settings().nova_allow_synthetic
+        if not allow:
+            logger.warning(
+                f"Nova: refusing '{niche}' — only SYNTHETIC data available "
+                f"(set NOVA_ALLOW_SYNTHETIC=1 to permit flagged synthetic research)"
+            )
+            alog("nova", "research_refused",
+                 f"Refused '{niche}': no real Etsy data (synthetic fallback blocked)",
+                 run_id=run_id)
+            return None
+        logger.warning(f"Nova: '{niche}' using SYNTHETIC data — will be flagged in output")
+        alog("nova", "research_synthetic",
+             f"⚠️ '{niche}' based on SYNTHETIC (model-generated) data, not real Etsy listings",
+             run_id=run_id)
+
     if len(signals) < 5:
         logger.warning(f"Nova: too few listings for '{niche}' ({len(signals)}), skipping")
         return None
@@ -98,7 +125,7 @@ def run_research(niche: str, run_id: str | None = None) -> dict | None:
     )
 
     try:
-        raw = complete(prompt, system=RESEARCH_SYSTEM, fast=True, json_mode=True)
+        raw = complete(prompt, system=RESEARCH_SYSTEM, task="screen", json_mode=True)
         raw = raw.strip()
         import re as _re
         fenced = _re.search(r"```(?:json)?\s*([\s\S]*?)```", raw)
@@ -111,12 +138,18 @@ def run_research(niche: str, run_id: str | None = None) -> dict | None:
         return None
 
     price_range = analysis.get("price_range", {})
+    recommendation = analysis.get("recommendation", "")
+    if is_synthetic:
+        # Make the warning impossible to miss wherever the text is surfaced.
+        recommendation = f"⚠️ SYNTHETIC (not real Etsy data): {recommendation}"
     trend = {
         "niche": niche,
         "signal_count": len(signals),
         "avg_price_usd": price_range.get("sweet_spot") or price_range.get("low", 0),
         "top_tags": analysis.get("top_tags", []),
-        "opportunity": analysis.get("recommendation", ""),
+        "opportunity": recommendation,
+        "data_source": source,
+        "is_synthetic": is_synthetic,
         "raw_data": analysis,  # includes recommended_products, concepts, avoid, style_themes
     }
 
@@ -211,7 +244,7 @@ def generate_discovery_niches(n: int = 8, existing: list[str] | None = None) -> 
     existing_str = "\n".join(f"- {e}" for e in existing_list[:25]) if existing_list else "None yet"
     prompt = DISCOVERY_PROMPT.format(n=n, existing=existing_str)
     try:
-        raw = complete(prompt, system=DISCOVERY_SYSTEM, fast=True, json_mode=True)
+        raw = complete(prompt, system=DISCOVERY_SYSTEM, task="ideate", json_mode=True)
         raw = raw.strip()
         import re as _re
         fenced = _re.search(r"```(?:json)?\s*([\s\S]*?)```", raw)
@@ -237,6 +270,10 @@ def _score_opportunity(trend: dict) -> float:
         score += 0.4   # sweet spot for POD margin
     elif 10 <= price < 15 or 35 < price <= 50:
         score += 0.2
+    # Synthetic data is a guess, not a signal — halve its score so real,
+    # observed niches always rank above fabricated ones.
+    if trend.get("is_synthetic"):
+        score *= 0.5
     return round(score, 3)
 
 
@@ -273,6 +310,8 @@ def run_trend_discovery(n_niches: int = 7) -> dict:
                 "avoid": raw.get("avoid", ""),
                 "opportunity_score": _score_opportunity(trend),
                 "price_range": raw.get("price_range", {}),
+                "data_source": trend.get("data_source"),
+                "is_synthetic": trend.get("is_synthetic", False),
             }
             opportunities.append(opp)
 

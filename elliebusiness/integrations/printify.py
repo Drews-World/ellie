@@ -430,7 +430,7 @@ def _generate_listing_copy(
         price_sweet_spot=price_sweet_spot,
     )
     try:
-        raw = complete(prompt, fast=False, json_mode=True)
+        raw = complete(prompt, task="listing_copy", json_mode=True)
         raw = raw.strip()
         fenced = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw)
         if fenced:
