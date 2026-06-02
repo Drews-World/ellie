@@ -17,7 +17,8 @@ from core.config import get_settings
 from core.scheduler import scheduler
 from agents.nova.researcher import run_all_niches
 from agents.ELLIE.supervisor import hourly_check
-from routers import status, nova, forge, archives, treasury, ellie_cmd, strategy, products
+from core.performance import sync_sales
+from routers import status, nova, forge, archives, treasury, ellie_cmd, strategy, products, sales
 
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
@@ -39,6 +40,7 @@ def require_auth(authorization: str | None = Header(default=None)) -> None:
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    scheduler.add_job(sync_sales, CronTrigger(hour=5, minute=30), id="sales_sync")
     scheduler.add_job(run_all_niches, CronTrigger(hour=6, minute=0), id="nova_daily")
     scheduler.add_job(hourly_check, IntervalTrigger(hours=1), id="ellie_hourly")
     scheduler.start()
@@ -77,3 +79,4 @@ app.include_router(treasury.router)        # /treasury/*
 app.include_router(ellie_cmd.router)       # /ellie/command /ellie/confirm /ellie/pipeline
 app.include_router(strategy.router)        # /strategy/report /strategy/latest
 app.include_router(products.router)        # /products/catalog /products/designs /products/generate_copy /products/create_draft
+app.include_router(sales.router)           # /sales/sync /sales/performance

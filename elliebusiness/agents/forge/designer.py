@@ -110,6 +110,13 @@ def generate_concepts(niche: str, n: int = 5, products: list[str] | None = None)
     """Step 3: LLM generates design concepts. Returns list of concept dicts."""
     style_memory = _get_style_memory(niche)
     trend_report = _get_trend_report(niche)
+    # Fold in realized sales — designs in niches that actually earned money should
+    # bias the next batch toward what sells, not just what scores well on paper.
+    try:
+        from core.performance import proven_sellers_text
+        trend_report = f"{trend_report}\n\n=== PROVEN SALES (real Etsy orders) ===\n{proven_sellers_text(niche)}"
+    except Exception as e:
+        logger.warning(f"Forge: sales memory unavailable: {e}")
     product_list = ", ".join(products) if products else "t-shirt, hoodie, mug, tote bag, poster, phone case"
 
     prompt = CONCEPT_PROMPT.format(
@@ -140,9 +147,17 @@ def score_concept(concept: dict, niche: str) -> float:
     try:
         raw = complete(prompt, system=SCORE_SYSTEM, task="score", json_mode=True)
         scores = _parse_json(raw)
-        return float(scores.get("overall", 0.5))
+        base = float(scores.get("overall", 0.5))
     except Exception:
-        return 0.5
+        base = 0.5
+    # Reward niches with realized sales: a proven money-maker out-ranks an unproven
+    # concept of equal aesthetic quality. Capped so taste still dominates.
+    try:
+        from core.performance import niche_sales_boost
+        base = min(1.0, base + niche_sales_boost(niche))
+    except Exception:
+        pass
+    return base
 
 
 def generate_images_for_concepts(concepts: list[dict]) -> list[dict]:

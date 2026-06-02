@@ -409,6 +409,33 @@ def get_product(product_id: str) -> dict:
     return r.json()
 
 
+def fetch_orders(limit: int = 100) -> list[dict]:
+    """Read-only: list shop orders (one page). Used by the sales-feedback loop.
+
+    Each order carries line_items with product_id + metadata.price (retail cents)
+    + metadata.title, which the performance layer maps back to design → niche.
+    """
+    out: list[dict] = []
+    page = 1
+    per_page = 10  # Printify caps the orders endpoint at 10 per page
+    while len(out) < limit and page <= 50:
+        r = httpx.get(
+            f"{BASE}/shops/{_shop_id()}/orders.json",
+            headers=_headers(), params={"limit": per_page, "page": page}, timeout=20,
+        )
+        r.raise_for_status()
+        body = r.json()
+        data = body.get("data", []) if isinstance(body, dict) else body
+        if not data:
+            break
+        out.extend(data)
+        # Stop when the page isn't full — that's the last page.
+        if len(data) < per_page:
+            break
+        page += 1
+    return out[:limit]
+
+
 # ── Listing copy ───────────────────────────────────────────────────────────────
 
 def _generate_listing_copy(
@@ -622,6 +649,19 @@ def approve_and_publish(
             )
             product_id = product.get("id")
             logger.info(f"Printify: created draft {product_id} for '{product_name}'")
+
+            # Persist the design → listing linkage so the sales-feedback loop can
+            # later map Printify orders back to this design and niche.
+            try:
+                db.table("listings").insert({
+                    "design_id": design_id,
+                    "printify_id": str(product_id),
+                    "title": copy["title"][:255],
+                    "price_usd": round(float(variant_price), 2),
+                    "status": "draft",
+                }).execute()
+            except Exception as e:
+                logger.warning(f"Printify: listing-link insert failed for {product_id}: {e}")
 
             # Wait briefly then re-fetch so Printify can finish generating all mockup images
             time.sleep(2)

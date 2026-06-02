@@ -274,6 +274,13 @@ def _score_opportunity(trend: dict) -> float:
     # observed niches always rank above fabricated ones.
     if trend.get("is_synthetic"):
         score *= 0.5
+    # Realized sales are the strongest possible signal: a niche we've actually
+    # earned money in beats one we only think looks good. Add a capped boost.
+    try:
+        from core.performance import niche_sales_boost
+        score = min(1.0, score + niche_sales_boost(trend.get("niche", "")))
+    except Exception:
+        pass
     return round(score, 3)
 
 
