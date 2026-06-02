@@ -39,3 +39,6 @@ APIKeys.txt
 
 # OpenHuman reference — large Rust/Tauri repo, reference only
 references/openhuman/
+
+# Hermes Agent — ELLIE's brain, cloned as a separate process (own git repo)
+hermes/
