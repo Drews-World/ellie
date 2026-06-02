@@ -1,4 +1,10 @@
-from services.model_router import complete
+import json
+import logging
+
+from services.model_router import complete, get_model_client
+from services.ellie_tools import TOOLS, dispatch_tool
+
+logger = logging.getLogger("ellie.chat")
 
 ELLIE_SYSTEM = """You are ELLIE — Executive Life Logic Intelligence Engine.
 You are the personal AI system built exclusively for Drew.
@@ -47,32 +53,125 @@ async def get_ellie_brief(widget: str, context: dict = {}) -> str:
         raise
 
 
+CHAT_DIRECTIVES = """
+
+YOU HAVE LIVE TOOLS. You are not a generic assistant — you are the brain of
+Drew's whole operation, with direct read access to every floor of the Hub:
+- The Etsy print-on-demand business (agent crew, pipeline, designs, realized sales, spend)
+- The autonomous trading fund (account, positions, P&L)
+- Drew's business registry (Quill Learning, The Parking Lot, and the above)
+
+When Drew asks anything about his businesses, sales, money, designs, the pipeline,
+or the trading fund — CALL THE RELEVANT TOOL and answer with the real numbers.
+Never say "no data" or "I don't have access" without first calling a tool. For a
+broad "how are my businesses doing" question, call list_businesses, then the live
+tool for each venture, and synthesize one cohesive briefing.
+
+INTELLIGENCE DIRECTIVES:
+- Pattern Recognition: surface behavioral patterns proactively.
+- Cross-Domain Connections: connect dots across Drew's world (e.g. if a Fed move affects Quill's runway, say so).
+- Proactive Alerts: lead with anything urgent rather than waiting to be asked.
+- Stay concise. Surface the insight, not the reasoning."""
+
+# Used only on the degraded (no-tools) path: a confused model must not invent
+# business metrics. Better to admit the floor is unreachable than to fabricate.
+NO_DATA_GUARD = """
+
+IMPORTANT: Your live data tools are currently UNAVAILABLE. You must NOT invent or
+estimate any business numbers (sales, revenue, units, positions, P&L, spend). If
+Drew asks for figures you can't retrieve, say plainly that the live data floor is
+unreachable right now and offer to try again — never make numbers up."""
+
+# Cap tool-calling rounds so a confused model can't loop forever.
+_MAX_TOOL_ROUNDS = 5
+
+
 async def ellie_chat(messages: list, context: dict = {}) -> str:
-    # Interactive conversation → "chat" task (fast tier, snappy model).
+    # Interactive conversation with live tool access → "the cohesive brain".
     system = ELLIE_SYSTEM
     if context:
         system += f"\n\nCurrent context about Drew: {context}"
-
-    system += """
-
-INTELLIGENCE DIRECTIVES:
-- Pattern Recognition: If you notice behavioral patterns (e.g. Drew has missed the gym multiple times before late standups), surface them proactively.
-- Cross-Domain Connections: Actively connect dots between Drew's world — if a Fed rate decision affects Quill's fundraising runway, say so.
-- Proactive Alerts: If something in Drew's context warrants urgent attention, lead with it rather than waiting to be asked.
-- Stay concise. Surface the insight, not the reasoning."""
+    system += CHAT_DIRECTIVES
 
     formatted = [{"role": m["role"], "content": m["content"]} for m in messages]
+    convo = [{"role": "system", "content": system}, *formatted]
 
     try:
-        return complete(
-            "chat",
-            max_tokens=1000,
-            messages=[{"role": "system", "content": system}, *formatted],
-        )
+        return await _chat_with_tools(convo)
     except Exception as e:
         err = str(e)
         if "quota" in err.lower() or "429" in err:
             return "**⚠ ELLIE OFFLINE** — model provider quota exceeded. Check your OpenRouter / Gemini billing. — ELLIE"
         if "api_key" in err.lower() or "authentication" in err.lower():
             return "**⚠ ELLIE OFFLINE** — invalid model provider key. Update OPENROUTER_API_KEY (or GEMINI_API_KEY) in backend/.env. — ELLIE"
-        raise
+        # Tool-calling can fail on providers/models that don't support it. Fall
+        # back to a plain completion so the chat still answers — but HARD-FORBID
+        # inventing data, since a hallucinated revenue figure is worse than an
+        # honest "the floor is unreachable".
+        logger.warning("ellie_chat tool loop failed (%s); falling back to plain completion", e)
+        safe_convo = [
+            {"role": "system", "content": ELLIE_SYSTEM + NO_DATA_GUARD},
+            *[m for m in convo if m.get("role") in ("user", "assistant") and m.get("content")],
+        ]
+        try:
+            return complete("chat", max_tokens=1000, messages=safe_convo)
+        except Exception:
+            raise
+
+
+async def _chat_with_tools(convo: list) -> str:
+    """Run the model with function-calling, executing tools until it answers.
+
+    Uses the `fast` tier (Llama 3.3 70B) — confirmed tool-capable on the current
+    OpenRouter account — for the orchestration. `complete()` only returns text
+    and can't surface tool_calls, so we drive the client directly here.
+    """
+    client, model = get_model_client("fast")
+
+    for _ in range(_MAX_TOOL_ROUNDS):
+        resp = client.chat.completions.create(
+            model=model,
+            messages=convo,
+            tools=TOOLS,
+            tool_choice="auto",
+            max_tokens=1000,
+        )
+        msg = resp.choices[0].message
+        tool_calls = getattr(msg, "tool_calls", None)
+
+        if not tool_calls:
+            return msg.content or "— ELLIE"
+
+        # Record the assistant turn (with its tool calls) before answering them.
+        convo.append({
+            "role": "assistant",
+            "content": msg.content or "",
+            "tool_calls": [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+                }
+                for tc in tool_calls
+            ],
+        })
+
+        for tc in tool_calls:
+            name = tc.function.name
+            try:
+                args = json.loads(tc.function.arguments or "{}")
+            except (ValueError, TypeError):
+                args = {}
+            logger.info("ellie_chat: tool call %s(%s)", name, args)
+            result = await dispatch_tool(name, args)
+            convo.append({
+                "role": "tool",
+                "tool_call_id": tc.id,
+                "content": json.dumps(result, default=str)[:6000],
+            })
+
+    # Hit the round cap — ask for a final answer with whatever it has gathered.
+    final = client.chat.completions.create(
+        model=model, messages=convo, max_tokens=1000,
+    )
+    return final.choices[0].message.content or "— ELLIE"
