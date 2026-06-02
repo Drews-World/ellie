@@ -1,5 +1,4 @@
-from openai import OpenAI
-from core.config import get_settings
+from services.model_router import complete
 
 ELLIE_SYSTEM = """You are ELLIE — Executive Life Logic Intelligence Engine.
 You are the personal AI system built exclusively for Drew.
@@ -27,41 +26,29 @@ WIDGET_PROMPTS = {
     "satellite": "Give a geographic intelligence summary — key hotspots worth monitoring from a satellite perspective: troop movements, environmental changes, infrastructure at risk, disaster zones.",
 }
 
-def _get_client():
-    settings = get_settings()
-    return OpenAI(
-        api_key=settings.gemini_api_key,
-        base_url=settings.gemini_base_url,
-    )
-
 async def get_ellie_brief(widget: str, context: dict = {}) -> str:
-    settings = get_settings()
-    client = _get_client()
-
+    # Widget briefs are routine summarization → "brief" task (bulk tier).
     base_prompt = WIDGET_PROMPTS.get(widget, f"Give an intelligence brief on: {widget}")
     prompt = base_prompt + ("\n\nContext data:\n" + str(context) if context else "")
 
     try:
-        response = client.chat.completions.create(
-            model=settings.gemini_model,
+        return complete(
+            "brief",
             max_tokens=1000,
             messages=[
                 {"role": "system", "content": ELLIE_SYSTEM},
                 {"role": "user", "content": prompt},
             ],
         )
-        return response.choices[0].message.content
     except Exception as e:
         err = str(e)
         if "quota" in err.lower() or "billing" in err.lower() or "429" in err:
-            return "**⚠ ELLIE OFFLINE** — Gemini API quota exceeded. Check Google AI Studio. — ELLIE"
+            return "**⚠ ELLIE OFFLINE** — model provider quota exceeded. Check your OpenRouter / Gemini billing. — ELLIE"
         raise
 
 
 async def ellie_chat(messages: list, context: dict = {}) -> str:
-    settings = get_settings()
-    client = _get_client()
-
+    # Interactive conversation → "chat" task (fast tier, snappy model).
     system = ELLIE_SYSTEM
     if context:
         system += f"\n\nCurrent context about Drew: {context}"
@@ -77,16 +64,15 @@ INTELLIGENCE DIRECTIVES:
     formatted = [{"role": m["role"], "content": m["content"]} for m in messages]
 
     try:
-        response = client.chat.completions.create(
-            model=settings.gemini_model,
+        return complete(
+            "chat",
             max_tokens=1000,
             messages=[{"role": "system", "content": system}, *formatted],
         )
-        return response.choices[0].message.content
     except Exception as e:
         err = str(e)
         if "quota" in err.lower() or "429" in err:
-            return "**⚠ ELLIE OFFLINE** — Gemini API quota exceeded. Check Google AI Studio dashboard. — ELLIE"
+            return "**⚠ ELLIE OFFLINE** — model provider quota exceeded. Check your OpenRouter / Gemini billing. — ELLIE"
         if "api_key" in err.lower() or "authentication" in err.lower():
-            return "**⚠ ELLIE OFFLINE** — Invalid Gemini API key. Update GEMINI_API_KEY in backend/.env. — ELLIE"
+            return "**⚠ ELLIE OFFLINE** — invalid model provider key. Update OPENROUTER_API_KEY (or GEMINI_API_KEY) in backend/.env. — ELLIE"
         raise

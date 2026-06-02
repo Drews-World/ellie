@@ -7,8 +7,25 @@ class Settings(BaseSettings):
     supabase_service_key: str
     supabase_anon_key: str = ""
 
-    # Gemini (via OpenAI-compat endpoint)
-    gemini_api_key: str
+    # ── Model layer ──
+    # Primary provider for ELLIE's brain: "openrouter" or "gemini".
+    # Falls back to Gemini automatically if openrouter_api_key is empty.
+    llm_provider: str = "openrouter"
+
+    # OpenRouter (primary — 200+ models, cost routing)
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+
+    # Model routing per task tier (OpenRouter model ids).
+    # See services/model_router.py + docs/ELLIE_REFACTOR_PLAN.md.
+    model_complex: str = "anthropic/claude-3.5-sonnet"        # high-stakes reasoning / code
+    model_fast: str = "meta-llama/llama-3.3-70b-instruct"     # conversational / quick
+    model_bulk: str = "qwen/qwen-2.5-72b-instruct"            # routine summarize / brief
+    model_trivial: str = "meta-llama/llama-3.1-8b-instruct"   # tagging / classification
+    model_multimodal: str = "google/gemini-flash-1.5"         # image / vision
+
+    # Gemini (fallback, via OpenAI-compat endpoint)
+    gemini_api_key: str = ""
     gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai"
     gemini_model: str = "gemini-2.0-flash"
 
