@@ -42,3 +42,6 @@ references/openhuman/
 
 # Hermes Agent — ELLIE's brain, cloned as a separate process (own git repo)
 hermes/
+
+# OAuth state / PKCE — transient secrets, never commit
+elliebusiness/etsy_oauth_*.txt
