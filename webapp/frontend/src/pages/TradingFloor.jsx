@@ -75,7 +75,16 @@ const WALK_ANIMS = {
     'north-west': 'd687fabe-9402-420d-85af-a8dd6846e317',
     'south-west': '8af7958f-3728-4f31-9e5c-20fb92a4a0fa',
   },
-  bull: null,   // queued 2026-05-29 — ~2-4 min, wire UUIDs when get_character returns completed
+  bull: {
+    'south':      '315f5ea6-ea52-4014-a25f-39f1e2746b83',
+    'east':       '75f13b70-7f5a-4274-ac4f-89122280ac9e',
+    'north':      '462f661d-3f01-4f7b-ada3-a80600ac5962',
+    'west':       'c0ae7a8c-2f8f-46b6-9df0-e0d3a2b0cf04',
+    'south-east': '11dee767-f4c6-43f2-b4c9-25a28d8d9ef0',
+    'north-east': '12432d97-36ea-47ce-ad6a-f74cff2bffd7',
+    'north-west': '328e332b-6b52-421e-9ba4-9052f4745ea4',
+    'south-west': '37e2e5e7-a537-4350-b3c1-587cae2be3c1',
+  },
 }
 
 function mkSprite(key, opts) {
@@ -903,20 +912,11 @@ function TradingFloorMap({ snap, orders, log, backlog, loading, selectedZone, on
   return (
     <div style={{
       position:'relative', flex:1, overflow:'hidden',
-      // Floor — Pixellab obsidian tiles + zone ambient lighting
-      background:'rgba(4,5,16,1)',
-      backgroundImage:[
-        // Zone ambient lighting (subtle floor tinting per zone) — drawn over tile texture
-        'radial-gradient(ellipse 34% 50% at 15% 52%, rgba(72,187,255,0.10) 0%, transparent 100%)',
-        'radial-gradient(ellipse 36% 52% at 50% 47%, rgba(155,114,255,0.12) 0%, transparent 100%)',
-        'radial-gradient(ellipse 34% 50% at 85% 52%, rgba(34,211,164,0.10) 0%, transparent 100%)',
-        'radial-gradient(ellipse 100% 32% at 50% 82%, rgba(255,178,63,0.10) 0%, transparent 100%)',
-        // ELLIE command center glow
-        'radial-gradient(circle 180px at 47% 47%, rgba(155,114,255,0.15) 0%, transparent 100%)',
-        // Pixellab floor — dark obsidian + amber circuit traces (Wang tileset, 128×128 at 2× scale)
-        'url(/sprites/trading-floor/floor-tiles.png)',
-      ].join(', '),
-      backgroundSize:'cover, cover, cover, cover, cover, 256px 256px',
+      background:'#000',
+      backgroundImage:'url(/sprites/trading-floor/trading-floor-map.png)',
+      backgroundSize:'cover',
+      backgroundPosition:'center',
+      backgroundRepeat:'no-repeat',
     }}>
 
       {/* Zone clickable overlays */}
