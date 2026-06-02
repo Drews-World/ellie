@@ -4,10 +4,26 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL ?? '',
 })
 
-// Attach Clerk token to every request
+// Attach Clerk token to every request.
+// Kept as a fallback for the brief window before Clerk's global is ready.
 export const setAuthToken = (token) => {
   api.defaults.headers.common['Authorization'] = `Bearer ${token}`
 }
+
+// Source of truth: fetch a FRESH Clerk token per request. The global default
+// header above goes stale — Clerk session tokens expire after 60s and a timer
+// refresh can fire late (background-tab throttling) or not at all before the
+// first request, yielding spurious 401s. Clerk caches the token internally and
+// only re-mints it near expiry, so this is cheap and always current.
+api.interceptors.request.use(async (config) => {
+  try {
+    const token = await window.Clerk?.session?.getToken()
+    if (token) config.headers.Authorization = `Bearer ${token}`
+  } catch {
+    // Clerk not ready — fall back to the default header set by setAuthToken
+  }
+  return config
+})
 
 // World data endpoints
 export const worldApi = {
