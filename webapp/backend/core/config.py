@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     # Model routing per task tier (OpenRouter model ids).
     # See services/model_router.py + docs/ELLIE_REFACTOR_PLAN.md.
-    model_complex: str = "anthropic/claude-3.5-sonnet"        # high-stakes reasoning / code
+    model_complex: str = "anthropic/claude-sonnet-4.5"        # high-stakes reasoning / code
     model_fast: str = "meta-llama/llama-3.3-70b-instruct"     # conversational / quick
     model_bulk: str = "qwen/qwen-2.5-72b-instruct"            # routine summarize / brief
     model_trivial: str = "meta-llama/llama-3.1-8b-instruct"   # tagging / classification
