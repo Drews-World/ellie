@@ -117,6 +117,11 @@ async def get_treasury_spend() -> dict:
     return await _safe(_biz_get, "/treasury/spend")
 
 
+async def get_promotion_status() -> dict:
+    """Pinterest promotion coverage: how many listings are pinned vs awaiting a Pin."""
+    return await _safe(_biz_get, "/promote/status")
+
+
 async def get_trading_status() -> dict:
     """Live trading fund snapshot: account equity/cash, open positions, today's P&L, fund state."""
     try:
@@ -241,6 +246,16 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "get_promotion_status",
+            "description": "Get Pinterest promotion coverage for the Etsy shop: how many "
+                           "listings have been pinned vs. how many are still awaiting a Pin, "
+                           "and whether Pinterest is connected. Use for marketing/traffic questions.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_trading_status",
             "description": "Get the live trading fund snapshot: account equity, cash, buying "
                            "power, open positions, today's P&L, and whether the fund is active. "
@@ -258,6 +273,7 @@ TOOL_DISPATCH = {
     "get_designs": get_designs,
     "get_market_trends": get_market_trends,
     "get_treasury_spend": get_treasury_spend,
+    "get_promotion_status": get_promotion_status,
     "get_trading_status": get_trading_status,
 }
 

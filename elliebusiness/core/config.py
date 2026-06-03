@@ -34,6 +34,16 @@ class Settings(BaseSettings):
     printify_api_token: str = ""
     printify_shop_id: str = ""
 
+    # ── Pinterest (Herald — promote listings to drive Etsy traffic) ──────────
+    pinterest_access_token: str = ""     # OAuth token from developers.pinterest.com
+    pinterest_base_url: str = "https://api.pinterest.com/v5"
+    pinterest_default_board_id: str = ""  # fallback board when no niche match
+    # Default OFF: the scheduled sweep will NOT post publicly until you flip this
+    # on. Manual /promote/listing calls (Drew/ELLIE-initiated) are always allowed.
+    pinterest_auto_promote: bool = False
+    # Etsy storefront base for building destination links from a listing id.
+    etsy_listing_base_url: str = "https://www.etsy.com/listing"
+
     # ── Discord ──────────────────────────────────────────────────────────────
     discord_webhook_url: str = ""    # EllieBusiness channel webhook
 

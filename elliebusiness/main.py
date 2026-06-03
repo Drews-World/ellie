@@ -18,7 +18,8 @@ from core.scheduler import scheduler
 from agents.nova.researcher import run_all_niches
 from agents.ELLIE.supervisor import hourly_check
 from core.performance import sync_sales
-from routers import status, nova, forge, archives, treasury, ellie_cmd, strategy, products, sales
+from agents.herald.promoter import auto_promote_pending
+from routers import status, nova, forge, archives, treasury, ellie_cmd, strategy, products, sales, promote
 
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
@@ -42,6 +43,9 @@ def require_auth(authorization: str | None = Header(default=None)) -> None:
 async def lifespan(app: FastAPI):
     scheduler.add_job(sync_sales, CronTrigger(hour=5, minute=30), id="sales_sync")
     scheduler.add_job(run_all_niches, CronTrigger(hour=6, minute=0), id="nova_daily")
+    # Herald sweep runs after the crew has published; no-ops unless
+    # PINTEREST_AUTO_PROMOTE=1, so it's safe to schedule unconditionally.
+    scheduler.add_job(auto_promote_pending, CronTrigger(hour=8, minute=0), id="herald_promote")
     scheduler.add_job(hourly_check, IntervalTrigger(hours=1), id="ellie_hourly")
     scheduler.start()
     yield
@@ -80,3 +84,4 @@ app.include_router(ellie_cmd.router)       # /ellie/command /ellie/confirm /elli
 app.include_router(strategy.router)        # /strategy/report /strategy/latest
 app.include_router(products.router)        # /products/catalog /products/designs /products/generate_copy /products/create_draft
 app.include_router(sales.router)           # /sales/sync /sales/performance
+app.include_router(promote.router)         # /promote/status /promote/boards /promote/listing/{id} /promote/run

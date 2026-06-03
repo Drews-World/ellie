@@ -315,6 +315,41 @@ async def products_create_draft(request: Request):
         raise HTTPException(status_code=502, detail=str(e))
 
 
+# ── Promote (Herald → Pinterest) ──────────────────────────────────────────────
+
+@router.get("/promote/status")
+async def promote_status():
+    try:
+        return await _get("/promote/status")
+    except Exception as e:
+        return {"configured": False, "promoted": 0, "unpromoted": 0, "error": str(e)}
+
+
+@router.get("/promote/boards")
+async def promote_boards():
+    try:
+        return await _get("/promote/boards")
+    except Exception as e:
+        return {"configured": False, "boards": [], "error": str(e)}
+
+
+@router.post("/promote/listing/{listing_id}")
+async def promote_listing(listing_id: str, force: bool = False):
+    # force/limit are query params on the elliebusiness side; bake into the path.
+    try:
+        return await _post(f"/promote/listing/{listing_id}?force={str(force).lower()}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.post("/promote/run")
+async def promote_run(limit: int = 10):
+    try:
+        return await _post(f"/promote/run?limit={limit}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
 # ── Treasury ──────────────────────────────────────────────────────────────────
 
 @router.get("/treasury/spend")
