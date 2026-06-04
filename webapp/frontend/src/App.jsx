@@ -16,7 +16,10 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        {/* Public — must be reachable without auth (Pinterest app review). */}
+        {/* Public — must be reachable without auth (Pinterest app review).
+            Pinterest requires the company name in the privacy-policy URL to
+            verify ownership, so the canonical path includes the brand slug. */}
+        <Route path="/ellie-by-drew/privacy" element={<PrivacyPolicy />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route
           path="/"
