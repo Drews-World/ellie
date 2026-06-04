@@ -2,15 +2,27 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
+  background: var(--bp-bg);
+  /* Organic HZD ambience: warm sun wash + a faint teal machine-glow + topo grid */
+  background-image:
+    radial-gradient(120% 80% at 85% -10%, rgba(95,208,216,0.10) 0%, transparent 45%),
+    radial-gradient(90% 70% at -10% 110%, rgba(126,139,107,0.14) 0%, transparent 50%),
+    linear-gradient(180deg, var(--bp-bg) 0%, var(--bp-bg-deep) 100%);
+  color: var(--bp-ink-2);
+  font-family: var(--bp-font-sans);
 }
+
 .body {
   display: flex;
   flex: 1;
   overflow: hidden;
 }
+
 .main {
   flex: 1;
   overflow-y: auto;
   padding: 0;
+  position: relative;
 }

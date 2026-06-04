@@ -1,3 +1,8 @@
+/* Biopunk Office design tokens (--bp-*). Additive: sits alongside the legacy
+   token set below; pages opt in via the `.biopunk` root class as each floor is
+   migrated. See src/design/tokens.css. */
+@import '../design/tokens.css';
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 /* ─── Design tokens — Sunrise Office ─── */

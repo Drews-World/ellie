@@ -1,0 +1,172 @@
+/* ───────────────────────────────────────────────────────────────────────────
+   ELLIE Hub — "Biopunk Office" design tokens
+   Aesthetic: light organic base, Horizon Zero Dawn fantasy-biopunk —
+   sunlit nature reclaiming sleek tech. One luminous teal-cyan machine accent.
+   ELLIE keeps a violet signature (documented single exception).
+
+   Source of truth = CSS custom properties (this codebase styles via inline
+   styles + CSS vars + CSS modules; Tailwind is not actually wired). These are
+   namespaced --bp-* so they sit ALONGSIDE the legacy tokens without collision;
+   pages are migrated onto them floor by floor. Apply `.biopunk` to a redesigned
+   page/app root to opt that subtree into the base background + text color.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── Base: sun-bleached organic, not white ───────────────────────────── */
+  --bp-bg:          #F2EBDC;  /* warm bone/sand — app canvas               */
+  --bp-bg-deep:     #E7DEC9;  /* lower wells, recessed areas               */
+  --bp-surface:     #FBF8F0;  /* raised panel                              */
+  --bp-surface-2:   #F1EAD9;  /* secondary panel / striped rows           */
+  --bp-surface-3:   #E9E1D0;  /* insets, track fills                      */
+
+  /* ── Glass (light frosted-sage) ──────────────────────────────────────── */
+  --bp-glass:        rgba(255, 253, 246, 0.55);
+  --bp-glass-strong: rgba(255, 253, 246, 0.78);
+  --bp-hairline:     rgba(65, 81, 59, 0.14);   /* moss-tinted 1px border    */
+  --bp-hairline-2:   rgba(65, 81, 59, 0.08);
+  --bp-highlight:    rgba(255, 255, 255, 0.7);  /* inner top edge highlight  */
+
+  /* ── Foliage (the "nature" half) ─────────────────────────────────────── */
+  --bp-sage:    #7E8B6B;
+  --bp-sage-2:  #9AA489;
+  --bp-moss:    #41513B;
+  --bp-moss-2:  #56684D;
+
+  /* ── Tech glow (the "machine" half) — single system accent ───────────── */
+  --bp-accent:        #4FB0B8;  /* teal-cyan                                */
+  --bp-accent-bright: #5FD0D8;  /* luminous — active/working glow           */
+  --bp-accent-deep:   #347E86;  /* text-on-light / pressed                  */
+  --bp-accent-wash:   rgba(79, 176, 184, 0.12);  /* tints, active fills     */
+  --bp-accent-glow:   rgba(95, 208, 216, 0.45);  /* node / link glow        */
+
+  /* ── Warm tech-light (HZD golden machine light) — secondary highlight ── */
+  --bp-amber:      #C98A3E;
+  --bp-amber-deep: #A66E2A;
+  --bp-amber-wash: rgba(201, 138, 62, 0.12);
+
+  /* ── Earth ───────────────────────────────────────────────────────────── */
+  --bp-clay:    #C2683F;  /* warmth / emphasis                             */
+  --bp-coral:   #C75D4A;  /* error / danger                                */
+  --bp-coral-wash: rgba(199, 93, 74, 0.12);
+
+  /* ── ELLIE signature (her one exception) ─────────────────────────────── */
+  --bp-ellie:        #7B6CF6;
+  --bp-ellie-bright: #9B8CFF;
+  --bp-ellie-wash:   rgba(123, 108, 246, 0.12);
+  --bp-ellie-glow:   rgba(123, 108, 246, 0.4);
+
+  /* ── Ink / type ramp (warm charcoal, not pure black) ─────────────────── */
+  --bp-ink:        #2A2620;
+  --bp-ink-2:      #4A443B;  /* body                                       */
+  --bp-ink-muted:  #6B6357;  /* secondary                                  */
+  --bp-ink-faint:  #9A9183;  /* captions, disabled                         */
+
+  /* ── Agent status (mapped to the palette) ────────────────────────────── */
+  --bp-st-idle:    var(--bp-ink-faint);
+  --bp-st-working: var(--bp-accent);
+  --bp-st-waiting: var(--bp-amber);
+  --bp-st-talking: var(--bp-accent-bright);
+  --bp-st-error:   var(--bp-coral);
+  --bp-st-done:    var(--bp-sage);
+
+  /* ── Radius — ONE locked scale ───────────────────────────────────────── */
+  --bp-r-xs:   6px;
+  --bp-r-sm:   8px;   /* inputs                                            */
+  --bp-r-md:   14px;  /* cards                                             */
+  --bp-r-lg:   20px;  /* large panels                                      */
+  --bp-r-pill: 999px; /* chips / pills / interactive                       */
+
+  /* ── Shadows — warm-tinted soft; teal-glow reserved for active tech ──── */
+  --bp-shadow-sm: 0 1px 2px rgba(65, 81, 59, 0.08);
+  --bp-shadow-md: 0 6px 20px rgba(86, 74, 52, 0.10);
+  --bp-shadow-lg: 0 18px 48px rgba(86, 74, 52, 0.16);
+  --bp-shadow-glow: 0 0 0 1px var(--bp-accent-wash), 0 0 22px var(--bp-accent-glow);
+  --bp-shadow-ellie: 0 0 0 1px var(--bp-ellie-wash), 0 0 22px var(--bp-ellie-glow);
+  --bp-shadow-inset-hi: inset 0 1px 0 var(--bp-highlight);
+
+  /* ── Type ────────────────────────────────────────────────────────────── */
+  --bp-font-sans: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+  --bp-font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --bp-text-2xs: 10px;
+  --bp-text-xs:  11px;
+  --bp-text-sm:  13px;
+  --bp-text-base:15px;
+  --bp-text-lg:  18px;
+  --bp-text-xl:  22px;
+  --bp-text-2xl: 28px;
+  --bp-text-3xl: 36px;
+
+  /* ── Motion — calm (MOTION dial = 3) ─────────────────────────────────── */
+  --bp-ease:      cubic-bezier(0.32, 0.72, 0, 1);
+  --bp-ease-soft: cubic-bezier(0.16, 1, 0.3, 1);
+  --bp-dur-fast:  140ms;
+  --bp-dur:       240ms;
+  --bp-dur-slow:  400ms;
+
+  /* ── Z-index scale (no arbitrary 9999) ───────────────────────────────── */
+  --bp-z-base:    1;
+  --bp-z-raised:  10;
+  --bp-z-sticky:  100;
+  --bp-z-drawer:  200;
+  --bp-z-overlay: 300;
+  --bp-z-toast:   400;
+}
+
+/* Opt-in base surface + ink for a redesigned subtree (page or app root). */
+.biopunk {
+  background: var(--bp-bg);
+  color: var(--bp-ink-2);
+  font-family: var(--bp-font-sans);
+}
+
+/* ── Shared keyframes for the kit (calm only — no CRT/glitch/sprite-walk) ─ */
+@keyframes bp-fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes bp-pulse {
+  0%, 100% { opacity: 1;   transform: scale(1); }
+  50%      { opacity: 0.55; transform: scale(0.82); }
+}
+
+/* Active-handoff: a luminous dash travels along a connection link. */
+@keyframes bp-link-flow {
+  to { stroke-dashoffset: -24; }
+}
+
+@keyframes bp-glow-breathe {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+
+@keyframes bp-shimmer {
+  0%   { background-position: -160% 0; }
+  100% { background-position: 260% 0; }
+}
+
+/* ── EllieChat animations (were referenced but never defined) ─────────────── */
+@keyframes ellie-panel-in  { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes ellie-panel-out { from { opacity: 1; transform: translateY(0); }    to { opacity: 0; transform: translateY(12px); } }
+@keyframes cursor-blink    { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes pulse-dot       { 0%, 100% { opacity: 0.3; transform: scale(0.7); } 50% { opacity: 1; transform: scale(1); } }
+
+.ellie-cursor {
+  display: inline-block;
+  width: 7px; height: 1.05em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--bp-ellie);
+  animation: cursor-blink 0.7s step-end infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .biopunk *,
+  .biopunk *::before,
+  .biopunk *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

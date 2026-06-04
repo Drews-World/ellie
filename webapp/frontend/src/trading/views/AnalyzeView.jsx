@@ -2,8 +2,9 @@ import { tfetch } from '../lib/tapi'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import ConfigPanel from '../components/ConfigPanel'
 import DiscoverPanel from '../components/DiscoverPanel'
-import AgentFeed from '../components/AgentFeed'
-import AgentDetailDrawer from '../components/AgentDetailDrawer'
+import TradingCrew from '../components/TradingCrew'
+import AgentDetailDrawer from '../../components/crew/AgentDetailDrawer'
+import { TRADING_CREW } from '../../components/crew/crews'
 import DecisionPanel from '../components/DecisionPanel'
 import ResultPanel from '../components/ResultPanel'
 import RunHistory from '../components/RunHistory'
@@ -208,7 +209,7 @@ export default function AnalyzeView() {
       <div className={styles.left}>
         <ConfigPanel config={config} onChange={setConfig} onRun={runAnalysis} isRunning={isRunning} />
         <DiscoverPanel config={config} onAnalyze={handleDiscoverAnalyze} isRunning={isRunning} />
-        <AgentFeed
+        <TradingCrew
           agents={agents}
           activeAgent={activeAgent}
           statusMsg={statusMsg}
@@ -239,10 +240,14 @@ export default function AnalyzeView() {
         )}
       </div>
 
-      {selectedAgent && agents[selectedAgent] && (
+      {selectedAgent && (
         <AgentDetailDrawer
+          crew={TRADING_CREW}
           agentId={selectedAgent}
-          data={agents[selectedAgent]}
+          status={agents[selectedAgent]?.status === 'running' ? 'working'
+            : agents[selectedAgent]?.status === 'done' ? 'done' : 'idle'}
+          live={{ report: agents[selectedAgent]?.report, snippet: agents[selectedAgent]?.snippet }}
+          events={[]}
           onClose={() => setSelectedAgent(null)}
         />
       )}

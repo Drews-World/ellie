@@ -1,0 +1,159 @@
+/* ───────────────────────────────────────────────────────────────────────────
+   Biopunk Office — UI kit interactive states.
+   Components carry structural inline styles (matching the codebase idiom); this
+   file owns what inline can't: hover / active / focus / scrollbar. All on --bp-*.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* ── Surface / card ──────────────────────────────────────────────────────── */
+.bp-card {
+  transition: transform var(--bp-dur) var(--bp-ease),
+              box-shadow var(--bp-dur) var(--bp-ease),
+              border-color var(--bp-dur) var(--bp-ease);
+}
+.bp-card--interactive { cursor: pointer; }
+.bp-card--interactive:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--bp-shadow-lg);
+  border-color: var(--bp-accent);
+}
+.bp-card--interactive:active { transform: translateY(-1px); }
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+.bp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--bp-font-sans);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border-radius: var(--bp-r-pill);
+  border: 1px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--bp-dur-fast) var(--bp-ease),
+              color var(--bp-dur-fast) var(--bp-ease),
+              border-color var(--bp-dur-fast) var(--bp-ease),
+              box-shadow var(--bp-dur-fast) var(--bp-ease),
+              transform var(--bp-dur-fast) var(--bp-ease);
+}
+.bp-btn:active { transform: translateY(1px); }
+.bp-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+.bp-btn--primary {
+  background: var(--bp-accent);
+  color: #08201F;
+  box-shadow: var(--bp-shadow-sm);
+}
+.bp-btn--primary:not(:disabled):hover {
+  background: var(--bp-accent-bright);
+  box-shadow: var(--bp-shadow-glow);
+}
+
+.bp-btn--ellie {
+  background: var(--bp-ellie);
+  color: #fff;
+}
+.bp-btn--ellie:not(:disabled):hover {
+  background: var(--bp-ellie-bright);
+  box-shadow: var(--bp-shadow-ellie);
+}
+
+.bp-btn--ghost {
+  background: transparent;
+  color: var(--bp-ink-2);
+  border-color: var(--bp-hairline);
+}
+.bp-btn--ghost:not(:disabled):hover {
+  border-color: var(--bp-accent);
+  color: var(--bp-accent-deep);
+  background: var(--bp-accent-wash);
+}
+
+.bp-btn--quiet {
+  background: transparent;
+  color: var(--bp-ink-muted);
+  border-color: transparent;
+}
+.bp-btn--quiet:not(:disabled):hover {
+  color: var(--bp-ink);
+  background: var(--bp-surface-3);
+}
+
+/* ── Focus ring (a11y) — teal, consistent everywhere in the new shell ─────── */
+.biopunk :focus-visible,
+.bp-focus:focus-visible {
+  outline: 2px solid var(--bp-accent);
+  outline-offset: 2px;
+  border-radius: var(--bp-r-xs);
+}
+
+/* ── Scrollbar inside the new shell ──────────────────────────────────────── */
+.biopunk ::-webkit-scrollbar { width: 8px; height: 8px; }
+.biopunk ::-webkit-scrollbar-track { background: transparent; }
+.biopunk ::-webkit-scrollbar-thumb {
+  background: var(--bp-surface-3);
+  border-radius: var(--bp-r-pill);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.biopunk ::-webkit-scrollbar-thumb:hover { background: var(--bp-sage-2); background-clip: padding-box; }
+
+/* ── Floor portals (lobby doorways into each floor) ──────────────────────── */
+.bp-portal {
+  --pa: var(--bp-accent);
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  border: 1.5px solid color-mix(in srgb, var(--pa) 55%, transparent);
+  border-radius: 18px 18px 7px 7px;
+  background: #0b0f12;
+  padding: 0;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--pa) 16%, transparent),
+    0 12px 30px rgba(40, 38, 32, 0.18),
+    0 0 22px color-mix(in srgb, var(--pa) 14%, transparent);
+  transition: transform var(--bp-dur) var(--bp-ease),
+              box-shadow var(--bp-dur) var(--bp-ease),
+              border-color var(--bp-dur) var(--bp-ease);
+}
+.bp-portal:not(:disabled):hover {
+  transform: translateY(-5px);
+  border-color: var(--pa);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--pa) 32%, transparent),
+    0 20px 46px rgba(40, 38, 32, 0.26),
+    0 0 44px color-mix(in srgb, var(--pa) 45%, transparent);
+}
+.bp-portal:disabled { cursor: not-allowed; opacity: 0.6; }
+
+.bp-portal-scene {
+  transition: filter var(--bp-dur) var(--bp-ease), transform var(--bp-dur-slow) var(--bp-ease);
+}
+.bp-portal:not(:disabled):hover .bp-portal-scene {
+  filter: brightness(1.12) saturate(1.08);
+  transform: scale(1.045);
+}
+
+.bp-portal-threshold {
+  opacity: 0.7;
+  transition: opacity var(--bp-dur) var(--bp-ease), box-shadow var(--bp-dur) var(--bp-ease);
+}
+.bp-portal:not(:disabled):hover .bp-portal-threshold {
+  opacity: 1;
+  box-shadow: 0 0 14px var(--pa);
+}
+.bp-portal:not(:disabled):hover .bp-portal-enter { color: var(--pa); }
+
+/* ── Skeleton shimmer (loading states) ───────────────────────────────────── */
+.bp-skeleton {
+  background: linear-gradient(
+    100deg,
+    var(--bp-surface-2) 30%,
+    var(--bp-surface) 50%,
+    var(--bp-surface-2) 70%
+  );
+  background-size: 220% 100%;
+  animation: bp-shimmer 1.4s linear infinite;
+  border-radius: var(--bp-r-sm);
+}

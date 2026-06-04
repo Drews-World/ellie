@@ -1,72 +1,72 @@
-/* Trading dashboard global styles — SCOPED to .tradingRoot so the light theme
-   and resets never leak into the dark hub on other routes. (Originally the
-   trading app's index.css :root/body globals.) */
+/* Trading dashboard styles — SCOPED to .tradingRoot. The whole sub-app is
+   variable-driven, so we fold it into the "Biopunk Office" HZD palette by
+   remapping its theme variables onto the global --bp-* tokens. (Was a separate
+   cool-grey light theme; now shares the hub's warm light HZD look + teal accent.) */
 
 .tradingRoot, .tradingRoot *, .tradingRoot *::before, .tradingRoot *::after {
   box-sizing: border-box;
 }
 
 .tradingRoot {
-  /* ── Backgrounds ──────────────────────────────────────── */
-  --bg-base:    #eef2f7;
-  --bg-panel:   #ffffff;
-  --bg-card:    #f8fafc;
-  --bg-hover:   #f1f5f9;
-  --bg-accent:  #ecfeff;
+  /* ── Backgrounds → warm HZD surfaces ──────────────────── */
+  --bg-base:    var(--bp-bg);
+  --bg-panel:   var(--bp-surface);
+  --bg-card:    var(--bp-surface-2);
+  --bg-hover:   var(--bp-surface-3);
+  --bg-accent:  var(--bp-accent-wash);
 
   /* ── Borders ──────────────────────────────────────────── */
-  --border:     #e2e8f0;
-  --border-dim: #f1f5f9;
+  --border:     var(--bp-hairline);
+  --border-dim: var(--bp-hairline-2);
 
-  /* ── Primary accent (teal) ────────────────────────────── */
-  --indigo:       #0891b2;
-  --indigo-dim:   #0e7490;
-  --indigo-glow:  rgba(8, 145, 178, 0.12);
-  --indigo-light: #ecfeff;
+  /* ── Primary accent → HZD teal-cyan ───────────────────── */
+  --indigo:       var(--bp-accent-deep);
+  --indigo-dim:   #2b6b72;
+  --indigo-glow:  var(--bp-accent-wash);
+  --indigo-light: var(--bp-accent-wash);
 
-  /* ── Semantic ─────────────────────────────────────────── */
-  --green:        #059669;
-  --green-light:  #ecfdf5;
-  --green-border: #a7f3d0;
+  /* ── Semantic (keep P&L green/red legible, harmonized) ── */
+  --green:        #4e9e72;
+  --green-light:  rgba(78, 158, 114, 0.12);
+  --green-border: rgba(78, 158, 114, 0.4);
 
-  --red:          #dc2626;
-  --red-light:    #fef2f2;
-  --red-border:   #fca5a5;
+  --red:          var(--bp-coral);
+  --red-light:    var(--bp-coral-wash);
+  --red-border:   rgba(199, 93, 74, 0.4);
 
-  --yellow:       #d97706;
-  --yellow-light: #fffbeb;
-  --yellow-border:#fde68a;
+  --yellow:       var(--bp-amber);
+  --yellow-light: var(--bp-amber-wash);
+  --yellow-border:rgba(201, 138, 62, 0.4);
 
-  --blue:         #2563eb;
-  --blue-light:   #eff6ff;
+  --blue:         #4f8ab8;
+  --blue-light:   rgba(79, 138, 184, 0.12);
 
-  --purple:       #7c3aed;
-  --purple-light: #f5f3ff;
+  --purple:       var(--bp-ellie);
+  --purple-light: var(--bp-ellie-wash);
 
   /* ── Text ─────────────────────────────────────────────── */
-  --text-primary:   #0f172a;
-  --text-secondary: #64748b;
-  --text-dim:       #94a3b8;
-  --text-on-accent: #ffffff;
+  --text-primary:   var(--bp-ink);
+  --text-secondary: var(--bp-ink-muted);
+  --text-dim:       var(--bp-ink-faint);
+  --text-on-accent: #08201f;
 
-  /* ── Shadows ──────────────────────────────────────────── */
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
-  --shadow-lg: 0 10px 30px rgba(0,0,0,0.10), 0 4px 8px rgba(0,0,0,0.05);
+  /* ── Shadows (warm-tinted) ────────────────────────────── */
+  --shadow-sm: var(--bp-shadow-sm);
+  --shadow-md: var(--bp-shadow-md);
+  --shadow-lg: var(--bp-shadow-lg);
 
-  /* ── Typography ───────────────────────────────────────── */
-  --font:      'Inter', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  /* ── Typography → hub fonts ───────────────────────────── */
+  --font:      var(--bp-font-sans);
+  --font-mono: var(--bp-font-mono);
 
   /* ── Radius ───────────────────────────────────────────── */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
+  --radius-sm: var(--bp-r-sm);
+  --radius-md: var(--bp-r-md);
+  --radius-lg: var(--bp-r-lg);
 
-  /* base surface for the dashboard container */
   height: 100%;
-  min-height: 100vh;
-  background: var(--bg-base);
+  min-height: 100%;
+  background: transparent; /* let the hub's warm gradient show through */
   color: var(--text-primary);
   font-family: var(--font);
   font-size: 14px;
@@ -74,12 +74,13 @@
   -webkit-font-smoothing: antialiased;
 }
 
-.tradingRoot ::-webkit-scrollbar { width: 5px; height: 5px; }
+.tradingRoot ::-webkit-scrollbar { width: 8px; height: 8px; }
 .tradingRoot ::-webkit-scrollbar-track { background: transparent; }
-.tradingRoot ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-.tradingRoot ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+.tradingRoot ::-webkit-scrollbar-thumb { background: var(--bp-surface-3); border-radius: 10px; }
+.tradingRoot ::-webkit-scrollbar-thumb:hover { background: var(--bp-sage-2); }
 
 .tradingRoot input, .tradingRoot select, .tradingRoot button, .tradingRoot textarea { font-family: var(--font); }
 .tradingRoot a { color: var(--indigo); text-decoration: none; }
 .tradingRoot a:hover { text-decoration: underline; }
-.tradingRoot ::selection { background: var(--indigo-light); color: var(--text-primary); }
+.tradingRoot ::selection { background: var(--bp-accent-wash); color: var(--text-primary); }
+.tradingRoot :focus-visible { outline: 2px solid var(--bp-accent); outline-offset: 2px; }

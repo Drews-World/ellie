@@ -37,7 +37,7 @@ export default function Layout() {
   }, [getToken])
 
   return (
-    <div className={styles.root}>
+    <div className={`biopunk ${styles.root}`}>
       <Header />
       <div className={styles.body}>
         <Sidebar />

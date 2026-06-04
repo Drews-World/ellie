@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { UserButton } from '@clerk/clerk-react'
 import GoveePanel from './GoveePanel'
+import { StatusDot } from '../ui'
 import styles from './Header.module.css'
 
 export default function Header() {
@@ -24,37 +25,28 @@ export default function Header() {
       <header className={styles.header}>
         <div className={styles.left}>
           <div className={styles.logoIcon}>
-            <img src="/sprites/EllieSprite/EllieHeadshot.png" width={32} height={32} alt="ELLIE"
-              style={{ objectFit: 'cover', borderRadius: 4, display: 'block' }} />
+            <img src="/sprites/EllieSprite/EllieHeadshot.png" width={36} height={36} alt="ELLIE"
+              style={{ objectFit: 'cover', display: 'block' }} />
           </div>
           <div>
-            <div className={styles.logoName}>ELLIE HUB</div>
+            <div className={styles.logoName}>ELLIE <b>Hub</b></div>
             <div className={styles.logoSub}>Executive Life Logic Intelligence Engine</div>
           </div>
         </div>
 
         <div className={styles.center}>
-          <div className={styles.centerTitle}>DREW COMMAND CENTER</div>
-          <div className={styles.centerSub}>All systems online</div>
+          <div className={styles.centerTitle}>Drew Command Center</div>
+          <div className={styles.centerSub}>
+            <StatusDot status="online" size={6} /> All systems online
+          </div>
         </div>
 
         <div className={styles.right}>
           <button
+            className={styles.iconBtn}
             onClick={() => setGoveeOpen(true)}
-            title="IoT Light Control"
-            style={{
-              background: 'none',
-              border: '1.5px solid var(--ink-300)',
-              borderRadius: 'var(--radius-md)',
-              color: 'var(--ink-500)',
-              cursor: 'pointer',
-              fontSize: 16,
-              padding: '4px 10px',
-              lineHeight: 1,
-              transition: 'all var(--transition)',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'var(--paper-100)'; e.currentTarget.style.borderColor = 'var(--ink-500)' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.borderColor = 'var(--ink-300)' }}
+            title="IoT light control"
+            aria-label="IoT light control"
           >
             💡
           </button>
@@ -62,17 +54,16 @@ export default function Header() {
             <div className={styles.time}>{time}</div>
             <div className={styles.date}>{date}</div>
           </div>
-          <div className={styles.statusDot} />
           <UserButton
             appearance={{
               elements: {
                 avatarBox: {
-                  width: 30,
-                  height: 30,
-                  border: '2px solid var(--ink-300)',
+                  width: 32,
+                  height: 32,
+                  border: '2px solid var(--bp-hairline)',
                   borderRadius: '50%',
-                }
-              }
+                },
+              },
             }}
           />
         </div>

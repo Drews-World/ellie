@@ -3,9 +3,9 @@ import { useEllieStore } from '../../store'
 import { personalApi, ellieApi } from '../../lib/api'
 import soundEngine from '../../lib/soundEngine'
 
-const mono = "var(--font-mono)"
-const orb  = "var(--font-ui)"
-const raj  = "var(--font-ui)"
+const mono = "var(--bp-font-mono)"
+const orb  = "var(--bp-font-sans)"
+const raj  = "var(--bp-font-sans)"
 
 const CHAT_BAR_H = 58
 
@@ -31,12 +31,12 @@ function ThinkingIndicator() {
   }, [])
   return (
     <div style={{
-      fontFamily: mono, fontSize: 11, color: 'var(--ink-500)',
+      fontFamily: mono, fontSize: 11, color: 'var(--bp-ink-muted)',
       letterSpacing: 1, display: 'flex', alignItems: 'center', gap: 8,
     }}>
-      <span style={{ color: 'var(--violet-500)', fontWeight: 700 }}>ELLIE</span>
+      <span style={{ color: 'var(--bp-ellie)', fontWeight: 700 }}>ELLIE</span>
       <span>{PHASES[phase]}</span>
-      <span style={{ animation: 'cursor-blink 0.7s step-end infinite', color: 'var(--violet-500)' }}>_</span>
+      <span style={{ animation: 'cursor-blink 0.7s step-end infinite', color: 'var(--bp-ellie)' }}>_</span>
       <span style={{ marginLeft: 'auto', opacity: 0.5 }}>{secs}s</span>
     </div>
   )
@@ -177,7 +177,7 @@ function useTypewriter(text, speed = 14) {
 // ── Bold formatter ────────────────────────────────────────────────────────────
 function formatEllie(text) {
   return text
-    .replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--violet-500);letter-spacing:.5px">$1</strong>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--bp-ellie);letter-spacing:.5px">$1</strong>')
     .replace(/\n\n/g, '<br><br>')
     .replace(/\n/g, '<br>')
 }
@@ -343,9 +343,9 @@ export default function EllieChat() {
             maxHeight: '52vh',
             display: 'flex',
             flexDirection: 'column',
-            background: 'var(--paper-50)',
-            borderTop: '2px solid var(--violet-500)',
-            borderBottom: '1px solid var(--paper-200)',
+            background: 'var(--bp-surface)',
+            borderTop: '2px solid var(--bp-ellie)',
+            borderBottom: '1px solid var(--bp-surface-3)',
             animation: `${chatOpen ? 'ellie-panel-in' : 'ellie-panel-out'} 0.28s ease forwards`,
             pointerEvents: chatOpen ? 'auto' : 'none',
           }}
@@ -354,14 +354,14 @@ export default function EllieChat() {
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             padding: '8px 16px',
-            borderBottom: '1px solid var(--paper-200)',
+            borderBottom: '1px solid var(--bp-surface-3)',
             flexShrink: 0,
-            background: 'var(--paper-100)',
+            background: 'var(--bp-surface-2)',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{
-                width: 28, height: 28, borderRadius: 'var(--radius-sm)',
-                background: 'rgba(155,114,255,0.12)',
+                width: 28, height: 28, borderRadius: 'var(--bp-r-sm)',
+                background: 'var(--bp-ellie-wash)',
                 border: '1.5px solid rgba(155,114,255,0.5)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 flexShrink: 0,
@@ -369,12 +369,12 @@ export default function EllieChat() {
                 <img src="/sprites/EllieSprite/EllieHeadshot.png" width={22} height={22} alt="ELLIE"
                   style={{ objectFit: 'cover', borderRadius: 3, display: 'block' }} />
               </div>
-              <span style={{ fontFamily: orb, fontSize: 11, fontWeight: 700, letterSpacing: 2, color: 'var(--ink-700)' }}>ELLIE RESPONSE</span>
+              <span style={{ fontFamily: orb, fontSize: 11, fontWeight: 700, letterSpacing: 2, color: 'var(--bp-ink-2)' }}>ELLIE RESPONSE</span>
               {chatLoading && (
                 <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
                   {[0,1,2].map(i => (
                     <div key={i} style={{
-                      width: 5, height: 5, borderRadius: '50%', background: 'var(--violet-500)',
+                      width: 5, height: 5, borderRadius: '50%', background: 'var(--bp-ellie)',
                       animation: `pulse-dot 1.2s ease-in-out ${i*0.2}s infinite`,
                     }}/>
                   ))}
@@ -386,10 +386,10 @@ export default function EllieChat() {
                 <button
                   onClick={() => setHistoryOpen(h => !h)}
                   style={{
-                    background: historyOpen ? 'var(--paper-200)' : 'none',
-                    border: '1px solid var(--ink-300)',
-                    color: 'var(--ink-500)', cursor: 'pointer',
-                    fontFamily: mono, fontSize: 10, padding: '3px 8px', borderRadius: 'var(--radius-md)',
+                    background: historyOpen ? 'var(--bp-surface-3)' : 'none',
+                    border: '1px solid var(--bp-hairline)',
+                    color: 'var(--bp-ink-muted)', cursor: 'pointer',
+                    fontFamily: mono, fontSize: 10, padding: '3px 8px', borderRadius: 'var(--bp-r-sm)',
                     letterSpacing: 1,
                   }}
                 >HISTORY {historyOpen ? '▾' : '▸'}</button>
@@ -397,9 +397,9 @@ export default function EllieChat() {
               <button
                 onClick={closePanel}
                 style={{
-                  background: 'none', border: '1px solid var(--ink-300)',
-                  color: 'var(--ink-500)', cursor: 'pointer',
-                  fontFamily: mono, fontSize: 12, padding: '2px 8px', borderRadius: 'var(--radius-md)',
+                  background: 'none', border: '1px solid var(--bp-hairline)',
+                  color: 'var(--bp-ink-muted)', cursor: 'pointer',
+                  fontFamily: mono, fontSize: 12, padding: '2px 8px', borderRadius: 'var(--bp-r-sm)',
                 }}
               >✕</button>
             </div>
@@ -409,7 +409,7 @@ export default function EllieChat() {
           {historyOpen && history.length > 0 && (
             <div style={{
               overflowY: 'auto', padding: '8px 16px',
-              borderBottom: '1px solid var(--paper-200)',
+              borderBottom: '1px solid var(--bp-surface-3)',
               maxHeight: 160, flexShrink: 0,
             }}>
               {history.map((m, i) => (
@@ -421,10 +421,10 @@ export default function EllieChat() {
                   alignItems: 'flex-start',
                 }}>
                   <span style={{
-                    fontFamily: mono, fontSize: 9, color: m.role === 'user' ? 'var(--amber-500)' : 'var(--violet-500)',
+                    fontFamily: mono, fontSize: 9, color: m.role === 'user' ? 'var(--bp-amber)' : 'var(--bp-ellie)',
                     letterSpacing: 1, marginTop: 2, flexShrink: 0, fontWeight: 700,
                   }}>{m.role === 'user' ? 'DREW' : 'ELLIE'}</span>
-                  <span style={{ fontFamily: raj, fontSize: 12, color: 'var(--ink-500)', lineHeight: 1.5 }}>
+                  <span style={{ fontFamily: raj, fontSize: 12, color: 'var(--bp-ink-muted)', lineHeight: 1.5 }}>
                     {m.content.replace(/\[System:.*?\]/g, '').trim()}
                   </span>
                 </div>
@@ -437,7 +437,7 @@ export default function EllieChat() {
             {chatLoading ? (
               <ThinkingIndicator />
             ) : (
-              <div style={{ fontFamily: raj, fontSize: 14, lineHeight: 1.75, color: 'var(--ink-700)' }}>
+              <div style={{ fontFamily: raj, fontSize: 14, lineHeight: 1.75, color: 'var(--bp-ink-2)' }}>
                 <span dangerouslySetInnerHTML={{ __html: formatEllie(displayed) }} />
                 {!done && <span className="ellie-cursor" />}
               </div>
@@ -452,8 +452,8 @@ export default function EllieChat() {
         bottom: 0, left: 0, right: 0,
         height: CHAT_BAR_H,
         zIndex: 1300,
-        background: 'var(--paper-50)',
-        borderTop: '1.5px solid var(--ink-300)',
+        background: 'var(--bp-surface)',
+        borderTop: '1.5px solid var(--bp-hairline)',
         display: 'flex',
         alignItems: 'center',
         padding: '0 16px',
@@ -464,9 +464,9 @@ export default function EllieChat() {
         {/* ELLIE avatar */}
         <div style={{
           width: 36, height: 36, flexShrink: 0,
-          background: 'rgba(3,1,20,0.92)',
+          background: 'var(--bp-surface)',
           border: `1.5px solid ${chatLoading ? 'rgba(155,114,255,0.85)' : 'rgba(155,114,255,0.35)'}`,
-          borderRadius: 'var(--radius-sm)',
+          borderRadius: 'var(--bp-r-sm)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           boxShadow: chatLoading ? '0 0 18px rgba(155,114,255,0.55), inset 0 0 12px rgba(155,114,255,0.1)' : '0 0 8px rgba(155,114,255,0.18)',
           transition: 'box-shadow 0.2s, border-color 0.2s',
@@ -484,10 +484,10 @@ export default function EllieChat() {
           placeholder="TALK TO ELLIE..."
           style={{
             flex: 1,
-            background: 'var(--paper-100)',
-            border: '1.5px solid var(--ink-300)',
-            borderRadius: 'var(--radius-md)',
-            color: 'var(--ink-900)',
+            background: 'var(--bp-surface-2)',
+            border: '1.5px solid var(--bp-hairline)',
+            borderRadius: 'var(--bp-r-sm)',
+            color: 'var(--bp-ink)',
             fontFamily: raj,
             fontSize: 14,
             padding: '0 14px',
@@ -495,8 +495,8 @@ export default function EllieChat() {
             outline: 'none',
             transition: 'border-color 0.15s',
           }}
-          onFocus={e => e.target.style.borderColor = 'var(--violet-500)'}
-          onBlur={e  => e.target.style.borderColor = 'var(--ink-300)'}
+          onFocus={e => e.target.style.borderColor = 'var(--bp-ellie)'}
+          onBlur={e  => e.target.style.borderColor = 'var(--bp-hairline)'}
           disabled={chatLoading}
         />
 
@@ -506,9 +506,9 @@ export default function EllieChat() {
           style={{
             width: 36, height: 36, flexShrink: 0,
             background: 'none',
-            border: '1.5px solid var(--ink-300)',
-            borderRadius: 'var(--radius-md)',
-            color: 'var(--ink-500)',
+            border: '1.5px solid var(--bp-hairline)',
+            borderRadius: 'var(--bp-r-sm)',
+            color: 'var(--bp-ink-muted)',
             cursor: 'default',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 15,
@@ -521,10 +521,10 @@ export default function EllieChat() {
           disabled={chatLoading || !input.trim()}
           style={{
             height: 36, padding: '0 16px', flexShrink: 0,
-            background: input.trim() && !chatLoading ? 'var(--grad-sunrise)' : 'var(--paper-200)',
+            background: input.trim() && !chatLoading ? 'var(--bp-ellie)' : 'var(--bp-surface-3)',
             border: 'none',
-            borderRadius: 'var(--radius-md)',
-            color: input.trim() && !chatLoading ? '#fff' : 'var(--ink-500)',
+            borderRadius: 'var(--bp-r-sm)',
+            color: input.trim() && !chatLoading ? '#fff' : 'var(--bp-ink-muted)',
             fontFamily: orb, fontWeight: 700, fontSize: 12, letterSpacing: 1,
             cursor: input.trim() && !chatLoading ? 'pointer' : 'default',
             transition: 'all 0.15s',
