@@ -1,5 +1,7 @@
+import asyncio
 import json
 import logging
+import os
 
 from services.model_router import complete, get_model_client
 from services.ellie_tools import TOOLS, dispatch_tool
@@ -85,6 +87,75 @@ unreachable right now and offer to try again — never make numbers up."""
 # Cap tool-calling rounds so a confused model can't loop forever.
 _MAX_TOOL_ROUNDS = 5
 
+# ── Hermes — the hosted brain ────────────────────────────────────────────────
+# When Hermes is installed on this host, route chat through it: one `hermes -z`
+# call runs the full agent (with the ellie-floors MCP tools) and returns the
+# final answer. If Hermes is absent (e.g. local dev) or errors/times out, we
+# fall back to the in-process tool-calling brain so chat never goes dark.
+# Master switch. Hermes is fully installed + tooled on the host, but one-shot
+# mode intermittently returns a narration stub instead of completing tool calls,
+# which would degrade the chat. Keep it OFF until that's resolved; the proven
+# in-process tool brain serves chat meanwhile. Flip HERMES_ENABLED=1 to promote
+# Hermes to the primary brain.
+HERMES_ENABLED = os.environ.get("HERMES_ENABLED", "").strip().lower() in ("1", "true", "yes", "on")
+HERMES_BIN = os.environ.get("HERMES_BIN", "/home/ellie/hermes/.venv/bin/hermes")
+# Sonnet is reliable at tool-calling; gpt-4o-mini drops the MCP tools.
+HERMES_MODEL = os.environ.get("HERMES_MODEL", "anthropic/claude-sonnet-4.5")
+HERMES_CWD = os.environ.get("HERMES_CWD", "/home/ellie/hermes")
+# One-shot only loads the "cli" profile by default; name the MCP floors toolset
+# explicitly so Hermes can actually see sales / trading / business tools.
+HERMES_TOOLSETS = os.environ.get("HERMES_TOOLSETS", "ellie-floors")
+HERMES_TIMEOUT = float(os.environ.get("HERMES_TIMEOUT", "180"))
+
+
+def _build_hermes_prompt(system: str, messages: list) -> str:
+    """Flatten persona + conversation into a single one-shot prompt for Hermes."""
+    lines = [system, "", "--- Conversation so far ---"]
+    for m in messages:
+        role = str(m.get("role", "user")).upper()
+        lines.append(f"{role}: {m.get('content', '')}")
+    lines.append(
+        "\nYou are ELLIE answering the latest USER message. CRITICAL: for any "
+        "business, sales, design, pipeline, spend, or trading numbers you MUST "
+        "actually CALL your ellie-floors tools and wait for their results before "
+        "replying. Do NOT output 'let me check' or narrate your plan — silently "
+        "run the tools, then return ONLY your final answer with the real figures. "
+        "Never guess numbers. Sign off with '— ELLIE'."
+    )
+    return "\n".join(lines)
+
+
+def _run_hermes_blocking(prompt: str) -> str | None:
+    """Blocking Hermes one-shot. Runs in a thread so asyncio's subprocess
+    child-watcher doesn't interfere with Hermes spawning its own MCP subprocess
+    (which silently truncates the agent loop). stdin is /dev/null so Hermes
+    doesn't block waiting on input."""
+    import subprocess
+    try:
+        r = subprocess.run(
+            [HERMES_BIN, "-z", prompt,
+             "--provider", "openrouter", "-m", HERMES_MODEL, "-t", HERMES_TOOLSETS],
+            cwd=HERMES_CWD, capture_output=True, text=True,
+            timeout=HERMES_TIMEOUT, stdin=subprocess.DEVNULL,
+        )
+        out = (r.stdout or "").strip()
+        if r.returncode == 0 and out:
+            return out
+        logger.warning("hermes oneshot rc=%s err=%s", r.returncode, (r.stderr or "")[:300])
+    except subprocess.TimeoutExpired:
+        logger.warning("hermes oneshot timed out after %ss", HERMES_TIMEOUT)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("hermes oneshot failed: %s", e)
+    return None
+
+
+async def _hermes_oneshot(prompt: str) -> str | None:
+    """Run Hermes in one-shot mode (off-thread); return its final answer or None."""
+    if not os.path.exists(HERMES_BIN):
+        return None
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _run_hermes_blocking, prompt)
+
 
 async def ellie_chat(messages: list, context: dict = {}) -> str:
     # Interactive conversation with live tool access → "the cohesive brain".
@@ -92,6 +163,13 @@ async def ellie_chat(messages: list, context: dict = {}) -> str:
     if context:
         system += f"\n\nCurrent context about Drew: {context}"
     system += CHAT_DIRECTIVES
+
+    # Primary brain: Hermes (hosted agent with floor tools via MCP) — opt-in.
+    if HERMES_ENABLED:
+        answer = await _hermes_oneshot(_build_hermes_prompt(system, messages))
+        if answer:
+            return answer
+        logger.info("ellie_chat: Hermes unavailable, using in-process tool brain")
 
     formatted = [{"role": m["role"], "content": m["content"]} for m in messages]
     convo = [{"role": "system", "content": system}, *formatted]
