@@ -8,9 +8,18 @@ Base prefix: /trading
 """
 
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Query
+
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel
-from services.ellie_trading_client import trading, EllieTradeError
+
+from core.auth import get_current_user
+from services.ellie_trading_client import (
+    trading,
+    EllieTradeError,
+    _base_url as _trading_base,
+    _headers as _trading_headers,
+)
 
 router = APIRouter(prefix="/trading", tags=["trading"])
 
@@ -320,3 +329,49 @@ async def discord_test():
         return await trading.test_discord()
     except EllieTradeError as e:
         raise _wrap(e)
+
+
+# ---------------------------------------------------------------------------
+# Generic authenticated passthrough
+# ---------------------------------------------------------------------------
+# The full trading dashboard (merged into the hub frontend) calls ~40 trading
+# endpoints. Rather than hand-mirror each, forward any path to the trading
+# server with its bearer token server-side — so the token never reaches the
+# browser and the call is gated by Clerk auth (get_current_user). The curated
+# typed routes above stay for existing callers; new dashboard views use this.
+
+# Long timeout: /analyze runs multi-agent analysis for several minutes.
+_PASSTHROUGH_TIMEOUT = 600
+
+# Never proxy the trading server's own password gate — Clerk replaces it.
+_PASSTHROUGH_BLOCKED = {"auth/password"}
+
+
+@router.api_route(
+    "/raw/{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+)
+async def trading_passthrough(path: str, request: Request, user=Depends(get_current_user)):
+    """Forward /trading/raw/<path> to the trading server with its auth token."""
+    if path.strip("/") in _PASSTHROUGH_BLOCKED:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    url = f"{_trading_base()}/{path.lstrip('/')}"
+    body = await request.body()
+    try:
+        async with httpx.AsyncClient(timeout=_PASSTHROUGH_TIMEOUT) as client:
+            resp = await client.request(
+                request.method,
+                url,
+                headers=_trading_headers(),
+                params=dict(request.query_params),
+                content=body or None,
+            )
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"trading server unreachable: {e}")
+
+    return Response(
+        content=resp.content,
+        status_code=resp.status_code,
+        media_type=resp.headers.get("content-type", "application/json"),
+    )
