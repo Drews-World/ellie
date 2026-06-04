@@ -350,6 +350,16 @@ async def promote_run(limit: int = 10):
         raise HTTPException(status_code=502, detail=str(e))
 
 
+# ── Sales (realized Etsy revenue per niche) ───────────────────────────────────
+
+@router.get("/sales/performance")
+async def sales_performance():
+    try:
+        return await _get("/sales/performance")
+    except Exception as e:
+        return {"niches": [], "total_units": 0, "total_revenue_usd": 0.0, "error": str(e)}
+
+
 # ── Treasury ──────────────────────────────────────────────────────────────────
 
 @router.get("/treasury/spend")

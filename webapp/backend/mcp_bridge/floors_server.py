@@ -212,6 +212,15 @@ async def business_alerts() -> dict:
 
 
 @mcp.tool()
+async def business_sales() -> dict:
+    """Realized Etsy sales per niche — actual units sold and revenue from completed
+    orders (cumulative, best sellers first), plus totals. Use this for any question
+    about how much the shop has SOLD / earned / what's selling best. (Distinct from
+    business_summary, which is today's agent activity, not realized revenue.)"""
+    return await _safe(lambda: _get("/business/sales/performance"))()
+
+
+@mcp.tool()
 async def business_treasury_spend() -> dict:
     """Today's business spend (API/service costs) broken down by agent. The store's
     cost side of the ledger."""
