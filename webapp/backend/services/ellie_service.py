@@ -125,27 +125,52 @@ def _build_hermes_prompt(system: str, messages: list) -> str:
     return "\n".join(lines)
 
 
+import re as _re
+
+HERMES_RETRIES = int(os.environ.get("HERMES_RETRIES", "3"))
+
+# A "stub" is the model narrating intent ("I'll call the tool…") and stopping
+# instead of actually completing the tool call — a known intermittent failure.
+# Short + matches an intent-to-act pattern ⇒ retry rather than serve it.
+_STUB_RE = _re.compile(
+    r"\b(i['’]?ll|i will|let me|i need to|i['’]?m going to|allow me to)\b"
+    r".{0,50}?\b(call|check|retrieve|query|use|pull|look up|fetch|get|access)\b",
+    _re.IGNORECASE,
+)
+
+
+def _looks_like_stub(text: str) -> bool:
+    t = (text or "").strip()
+    if len(t) > 400:
+        return False  # a substantial answer is not a stub
+    return bool(_STUB_RE.search(t))
+
+
 def _run_hermes_blocking(prompt: str) -> str | None:
-    """Blocking Hermes one-shot. Runs in a thread so asyncio's subprocess
-    child-watcher doesn't interfere with Hermes spawning its own MCP subprocess
-    (which silently truncates the agent loop). stdin is /dev/null so Hermes
-    doesn't block waiting on input."""
+    """Blocking Hermes one-shot with retry-on-stub. Runs in a thread (keeps
+    asyncio's child-watcher out of Hermes's own MCP subprocess spawning) and
+    re-runs when the model returns a narration stub instead of a real answer.
+    Returns None after exhausting retries so the caller falls back."""
     import subprocess
-    try:
-        r = subprocess.run(
-            [HERMES_BIN, "-z", prompt,
-             "--provider", "openrouter", "-m", HERMES_MODEL, "-t", HERMES_TOOLSETS],
-            cwd=HERMES_CWD, capture_output=True, text=True,
-            timeout=HERMES_TIMEOUT, stdin=subprocess.DEVNULL,
-        )
-        out = (r.stdout or "").strip()
-        if r.returncode == 0 and out:
-            return out
-        logger.warning("hermes oneshot rc=%s err=%s", r.returncode, (r.stderr or "")[:300])
-    except subprocess.TimeoutExpired:
-        logger.warning("hermes oneshot timed out after %ss", HERMES_TIMEOUT)
-    except Exception as e:  # noqa: BLE001
-        logger.warning("hermes oneshot failed: %s", e)
+    for attempt in range(1, HERMES_RETRIES + 1):
+        try:
+            r = subprocess.run(
+                [HERMES_BIN, "-z", prompt,
+                 "--provider", "openrouter", "-m", HERMES_MODEL, "-t", HERMES_TOOLSETS],
+                cwd=HERMES_CWD, capture_output=True, text=True,
+                timeout=HERMES_TIMEOUT, stdin=subprocess.DEVNULL,
+            )
+            out = (r.stdout or "").strip()
+            if r.returncode == 0 and out:
+                if not _looks_like_stub(out):
+                    return out
+                logger.info("hermes stub on attempt %d/%d, retrying", attempt, HERMES_RETRIES)
+                continue
+            logger.warning("hermes oneshot rc=%s err=%s", r.returncode, (r.stderr or "")[:300])
+        except subprocess.TimeoutExpired:
+            logger.warning("hermes oneshot timed out after %ss (attempt %d)", HERMES_TIMEOUT, attempt)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("hermes oneshot failed (attempt %d): %s", attempt, e)
     return None
 
 
