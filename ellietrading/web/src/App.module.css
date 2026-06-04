@@ -1,0 +1,33 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg-base);
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.main {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+
+@media (max-width: 768px) {
+  .body {
+    flex-direction: column-reverse;
+  }
+
+  .main {
+    padding: 10px;
+    padding-bottom: 72px;
+  }
+}

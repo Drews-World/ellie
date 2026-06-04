@@ -1,0 +1,3445 @@
+"""FastAPI backend for TradingAgents control center."""
+
+import asyncio
+import concurrent.futures
+import json
+import logging
+import logging.handlers
+import os
+import re
+import threading
+import uuid
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Dict, List, Optional
+
+from dotenv import load_dotenv, set_key, dotenv_values
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from sse_starlette.sse import EventSourceResponse
+
+load_dotenv()
+
+import alpaca_client  # local module — safe to import even if alpaca-py not installed
+
+app = FastAPI(title="TradingAgents Control Center")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ── Paths ─────────────────────────────────────────────────────────────────────
+ROOT = Path(__file__).parent
+ENV_FILE = ROOT / ".env"
+PORTFOLIO_FILE = Path.home() / ".tradingagents" / "ui_portfolio.json"
+MONITOR_FILE   = Path.home() / ".tradingagents" / "ui_monitors.json"
+SCOUT_FILE     = Path.home() / ".tradingagents" / "ui_scout.json"
+FUND_FILE      = Path.home() / ".tradingagents" / "fund_state.json"
+CATALYST_FILE  = Path.home() / ".tradingagents" / "catalyst_watch.json"
+BACKLOG_FILE   = Path.home() / ".tradingagents" / "buy_backlog.json"
+PORTFOLIO_HISTORY_FILE = Path.home() / ".tradingagents" / "portfolio_history.json"
+PORTFOLIO_FILE.parent.mkdir(parents=True, exist_ok=True)
+APP_LOG_FILE = Path.home() / ".tradingagents" / "app.log"
+
+# ── App logger ────────────────────────────────────────────────────────────────
+class _JsonLogFormatter(logging.Formatter):
+    def format(self, record):
+        return json.dumps({
+            "ts":    datetime.utcnow().isoformat() + "Z",
+            "level": record.levelname,
+            "src":   record.name,
+            "msg":   record.getMessage(),
+        })
+
+_app_logger = logging.getLogger("ellie")
+_app_logger.setLevel(logging.DEBUG)
+_app_logger.propagate = False
+_log_handler = logging.handlers.RotatingFileHandler(
+    APP_LOG_FILE, maxBytes=3_000_000, backupCount=2, encoding="utf-8"
+)
+_log_handler.setFormatter(_JsonLogFormatter())
+_app_logger.addHandler(_log_handler)
+
+_monitor_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="monitor")
+
+# ── Constants ─────────────────────────────────────────────────────────────────
+TRACKED_KEYS = [
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "GOOGLE_API_KEY",
+    "XAI_API_KEY",
+    "ALPHA_VANTAGE_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "GROQ_API_KEY",
+    "DISCORD_WEBHOOK_URL",
+    "DISCORD_BOT_TOKEN",
+    "DISCORD_CHANNEL_ID",
+    "APCA_API_KEY_ID",
+    "APCA_API_SECRET_KEY",
+    "APCA_BASE_URL",
+    "FINNHUB_API_KEY",
+    "SITE_PASSWORD",
+]
+
+# ── Alpaca auto-trade config (persisted to disk) ───────────────────────────────
+ALPACA_CONFIG_FILE = Path.home() / ".tradingagents" / "alpaca_config.json"
+
+def _load_alpaca_config() -> dict:
+    if ALPACA_CONFIG_FILE.exists():
+        try:
+            return json.loads(ALPACA_CONFIG_FILE.read_text())
+        except Exception:
+            pass
+    return {
+        "auto_trade": False,
+        "auto_trade_signals": ["BUY"],   # which signals trigger a trade
+        "position_pct": 5.0,             # % of portfolio per trade
+        "max_position_pct": 10.0,        # never exceed this % in one stock
+        "paper": True,
+    }
+
+def _save_alpaca_config(cfg: dict):
+    ALPACA_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    ALPACA_CONFIG_FILE.write_text(json.dumps(cfg, indent=2))
+
+NODE_TO_AGENT = {
+    "Fundamentals Analyst": "fundamentals",
+    "Market Analyst":       "market",
+    "Social Analyst":       "social",
+    "News Analyst":         "news",
+    "Bull Researcher":      "bull_researcher",
+    "Bear Researcher":      "bear_researcher",
+    "Research Manager":     "research_manager",
+    "Trader":               "trader",
+    "Aggressive Analyst":   "aggressive",
+    "Conservative Analyst": "conservative",
+    "Neutral Analyst":      "neutral",
+    "Portfolio Manager":    "portfolio_manager",
+}
+
+NODE_REPORT_FIELDS = {
+    "Fundamentals Analyst": ["fundamentals_report"],
+    "Market Analyst":       ["market_report"],
+    "Social Analyst":       ["sentiment_report"],
+    "News Analyst":         ["news_report"],
+    "Bull Researcher":      ["investment_debate_state.current_response"],
+    "Bear Researcher":      ["investment_debate_state.current_response"],
+    "Research Manager":     ["investment_debate_state.judge_decision"],
+    "Trader":               ["trader_investment_plan"],
+    "Aggressive Analyst":   ["risk_debate_state.current_aggressive_response"],
+    "Conservative Analyst": ["risk_debate_state.current_conservative_response"],
+    "Neutral Analyst":      ["risk_debate_state.current_neutral_response"],
+    "Portfolio Manager":    ["final_trade_decision"],
+}
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _load_portfolio() -> List[dict]:
+    if PORTFOLIO_FILE.exists():
+        try:
+            return json.loads(PORTFOLIO_FILE.read_text())
+        except Exception:
+            return []
+    return []
+
+
+def _save_portfolio(runs: List[dict]):
+    PORTFOLIO_FILE.write_text(json.dumps(runs, indent=2))
+
+
+def _load_monitors() -> dict:
+    if MONITOR_FILE.exists():
+        try:
+            return json.loads(MONITOR_FILE.read_text())
+        except Exception:
+            pass
+    return {"monitors": [], "alerts": []}
+
+
+def _save_monitors(data: dict):
+    MONITOR_FILE.write_text(json.dumps(data, indent=2))
+
+
+def _load_scout() -> dict:
+    if SCOUT_FILE.exists():
+        try:
+            return json.loads(SCOUT_FILE.read_text())
+        except Exception:
+            pass
+    return {
+        "config": {
+            "enabled": False,
+            "interval_hours": 24.0,
+            "llm_provider": "google",
+            "deep_think_llm": "gemini-2.5-pro",
+            "quick_think_llm": "gemini-2.5-flash",
+            "theme": "",
+            "max_stocks": 3,
+        },
+        "recommendations": [],
+        "last_run": None,
+        "next_run": None,
+        "is_running": False,
+        "last_error": None,
+    }
+
+
+def _save_scout(data: dict):
+    SCOUT_FILE.write_text(json.dumps(data, indent=2))
+
+
+def _load_fund() -> dict:
+    if FUND_FILE.exists():
+        try:
+            return json.loads(FUND_FILE.read_text())
+        except Exception:
+            pass
+    return {
+        "active": False,
+        "launched_at": None,
+        "last_daily_review": None,
+        "next_daily_review": None,
+        "last_biweekly_analysis": None,
+        "next_biweekly_analysis": None,
+        "last_weekly_report": None,
+        "next_weekly_report": None,
+        "config": {
+            "llm_provider": "google",
+            "deep_think_llm": "gemini-2.5-pro",
+            "quick_think_llm": "gemini-2.5-flash",
+            "initial_stocks": 5,
+            "position_pct": 5.0,
+            "max_position_pct": 15.0,
+            "weekly_new_buy": True,
+            "min_hold_days": 14,
+            "investment_style": "mixed",
+            "discovery_count": 1,
+            "auto_buy_backlog": False,
+        },
+        "log": [],
+    }
+
+
+def _save_fund(data: dict):
+    FUND_FILE.parent.mkdir(parents=True, exist_ok=True)
+    FUND_FILE.write_text(json.dumps(data, indent=2))
+
+
+def _first_n_words(text: str, n: int = 40) -> str:
+    if not text:
+        return ""
+    words = text.split()
+    snippet = " ".join(words[:n])
+    return snippet + ("…" if len(words) > n else "")
+
+
+def _extract_report(node_name: str, state_delta: dict) -> str:
+    """Pull the relevant report text out of a node's state delta."""
+    if not isinstance(state_delta, dict):
+        return ""
+    fields = NODE_REPORT_FIELDS.get(node_name, [])
+    for field in fields:
+        parts = field.split(".")
+        val = state_delta
+        for p in parts:
+            if isinstance(val, dict):
+                val = val.get(p, "")
+            else:
+                val = ""
+                break
+        if val and isinstance(val, str):
+            return val
+    return ""
+
+
+def _get_price(ticker: str, date: str) -> Optional[float]:
+    """Fetch close price for ticker on or just after date. Returns None on failure."""
+    try:
+        import yfinance as yf
+        start = datetime.strptime(date, "%Y-%m-%d")
+        end = start + timedelta(days=5)
+        hist = yf.Ticker(ticker).history(start=date, end=end.strftime("%Y-%m-%d"))
+        if not hist.empty:
+            return round(float(hist["Close"].iloc[0]), 2)
+    except Exception:
+        pass
+    return None
+
+
+def _get_current_price(ticker: str) -> Optional[float]:
+    try:
+        import yfinance as yf
+        t = yf.Ticker(ticker)
+        info = t.fast_info
+        price = getattr(info, "last_price", None)
+        if price:
+            return round(float(price), 2)
+        hist = t.history(period="2d")
+        if not hist.empty:
+            return round(float(hist["Close"].iloc[-1]), 2)
+    except Exception:
+        pass
+    return None
+
+
+# ── Models ────────────────────────────────────────────────────────────────────
+
+class AnalyzeRequest(BaseModel):
+    ticker: str
+    date: str
+    llm_provider: str = "openai"
+    deep_think_llm: str = "gpt-4o"
+    quick_think_llm: str = "gpt-4o-mini"
+    max_debate_rounds: int = 1
+
+
+class SettingsUpdate(BaseModel):
+    OPENAI_API_KEY: Optional[str] = None
+    ANTHROPIC_API_KEY: Optional[str] = None
+    GOOGLE_API_KEY: Optional[str] = None
+    XAI_API_KEY: Optional[str] = None
+    ALPHA_VANTAGE_API_KEY: Optional[str] = None
+    DEEPSEEK_API_KEY: Optional[str] = None
+    GROQ_API_KEY: Optional[str] = None
+    DISCORD_WEBHOOK_URL: Optional[str] = None
+    DISCORD_BOT_TOKEN: Optional[str] = None
+    DISCORD_CHANNEL_ID: Optional[str] = None
+    APCA_API_KEY_ID: Optional[str] = None
+    APCA_API_SECRET_KEY: Optional[str] = None
+    APCA_BASE_URL: Optional[str] = None
+
+
+class AlpacaTradeConfig(BaseModel):
+    auto_trade: bool = False
+    auto_trade_signals: List[str] = ["BUY"]
+    position_pct: float = 5.0
+    max_position_pct: float = 10.0
+
+
+class AlpacaOrderRequest(BaseModel):
+    symbol: str
+    side: str          # "buy" or "sell"
+    qty: Optional[float] = None
+    notional: Optional[float] = None
+
+
+class DiscoverRequest(BaseModel):
+    llm_provider: str = "google"
+    model: str = "gemini-2.5-flash"
+    theme: str = ""
+    count: int = 5
+
+
+class MonitorCreate(BaseModel):
+    ticker: str
+    llm_provider: str = "google"
+    deep_think_llm: str = "gemini-2.5-pro"
+    quick_think_llm: str = "gemini-2.5-flash"
+    interval_hours: float = 24
+
+
+class ScoutConfig(BaseModel):
+    enabled: bool = False
+    interval_hours: float = 24.0
+    llm_provider: str = "google"
+    deep_think_llm: str = "gemini-2.5-pro"
+    quick_think_llm: str = "gemini-2.5-flash"
+    theme: str = ""
+    max_stocks: int = 3
+
+
+class FundConfig(BaseModel):
+    llm_provider: str = "google"
+    deep_think_llm: str = "gemini-2.5-pro"
+    quick_think_llm: str = "gemini-2.5-flash"
+    initial_stocks: int = 5
+    position_pct: float = 5.0
+    max_position_pct: float = 15.0
+    weekly_new_buy: bool = True
+    min_hold_days: int = 14
+    investment_style: str = "mixed"   # "longterm" | "shortterm" | "mixed"
+    discovery_count: int = 1          # how many new stocks to find+buy on manual discover
+    auto_buy_backlog: bool = False     # auto-execute backlog buys when cash becomes available
+
+
+# ── Settings endpoints ────────────────────────────────────────────────────────
+
+@app.get("/settings")
+async def get_settings():
+    """Return which API keys are configured (values masked)."""
+    env_vals = dotenv_values(ENV_FILE) if ENV_FILE.exists() else {}
+    result = {}
+    for key in TRACKED_KEYS:
+        val = env_vals.get(key) or os.getenv(key) or ""
+        result[key] = {
+            "set": bool(val.strip()),
+            "preview": (val[:8] + "…") if len(val) > 8 else ("set" if val else ""),
+        }
+    return result
+
+
+@app.post("/settings")
+async def save_settings(data: SettingsUpdate):
+    """Write API keys to .env file."""
+    if not ENV_FILE.exists():
+        ENV_FILE.write_text("")
+
+    updates = data.model_dump(exclude_none=True)
+    for key, value in updates.items():
+        value = value.strip()
+        if value:
+            set_key(str(ENV_FILE), key, value)
+            os.environ[key] = value
+
+    load_dotenv(ENV_FILE, override=True)
+    return {"ok": True, "updated": list(updates.keys())}
+
+
+# ── Auth endpoint ─────────────────────────────────────────────────────────────
+
+@app.post("/auth/password")
+async def check_password(data: dict):
+    """Check the site password for the public-facing read-only view gate."""
+    site_password = os.getenv("SITE_PASSWORD", "").strip()
+    if not site_password:
+        raise HTTPException(status_code=503, detail="SITE_PASSWORD not configured on server.")
+    if data.get("password", "") == site_password:
+        return {"ok": True}
+    raise HTTPException(status_code=401, detail="Incorrect password.")
+
+
+# ── Portfolio endpoints ───────────────────────────────────────────────────────
+
+@app.get("/portfolio")
+async def get_portfolio():
+    """Return all past runs with current prices and P&L."""
+    runs = _load_portfolio()
+
+    enriched = []
+    seen_tickers: Dict[str, Optional[float]] = {}
+
+    for run in runs:
+        ticker = run.get("ticker", "")
+
+        # Fetch current price once per ticker
+        if ticker not in seen_tickers:
+            seen_tickers[ticker] = _get_current_price(ticker)
+        current_price = seen_tickers[ticker]
+
+        entry_price = run.get("entry_price")
+        pnl_pct = None
+        if entry_price and current_price:
+            direction = 1 if run.get("signal") in ("Buy", "Overweight") else -1 if run.get("signal") in ("Sell", "Underweight") else 0
+            raw_pnl = (current_price - entry_price) / entry_price * 100
+            pnl_pct = round(raw_pnl * direction if direction else raw_pnl, 2)
+
+        enriched.append({
+            **run,
+            "current_price": current_price,
+            "pnl_pct": pnl_pct,
+        })
+
+    return {"runs": enriched}
+
+
+@app.delete("/portfolio/{run_id}")
+async def delete_portfolio_run(run_id: str):
+    runs = _load_portfolio()
+    runs = [r for r in runs if r.get("id") != run_id]
+    _save_portfolio(runs)
+    return {"ok": True}
+
+
+# ── Discord integration ───────────────────────────────────────────────────────
+
+SIGNAL_EMOJI = {
+    "Buy": "🟢", "Overweight": "🟢",
+    "Hold": "🟡",
+    "Sell": "🔴", "Underweight": "🔴",
+}
+SIGNAL_PLAIN = {
+    "Buy": "BUY ↑", "Overweight": "BUY ↑",
+    "Hold": "HOLD →",
+    "Sell": "SELL ↓", "Underweight": "SELL ↓",
+}
+SIGNAL_COLOR = {
+    "Buy": 3066993, "Overweight": 3066993,   # green
+    "Hold": 16776960,                          # yellow
+    "Sell": 15158332, "Underweight": 15158332, # red
+}
+
+
+def _send_discord_webhook(title: str, description: str, signal: str = "", fields: list = None, footer: str = ""):
+    """POST a rich embed to the configured Discord webhook. Fire-and-forget."""
+    webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
+    if not webhook_url:
+        _fund_log("Discord: DISCORD_WEBHOOK_URL not set — skipping notification")
+        return
+    import urllib.request as ur
+    color = SIGNAL_COLOR.get(signal, 5793266)
+    embed = {"title": title, "description": description, "color": color}
+    if fields:
+        embed["fields"] = fields
+    if footer:
+        embed["footer"] = {"text": footer}
+    payload = json.dumps({"embeds": [embed]}).encode()
+    try:
+        req = ur.Request(webhook_url, data=payload, headers={
+            "Content-Type": "application/json",
+            "User-Agent": "DiscordBot (https://github.com, 1.0)",
+        }, method="POST")
+        ur.urlopen(req, timeout=10)
+        _fund_log(f"Discord: sent '{title}'")
+    except Exception as e:
+        _app_logger.error(f"[discord] send failed — {e}")
+        _fund_log(f"Discord: send failed — {e}")
+
+
+@app.post("/discord/test")
+async def discord_test():
+    """Send a test message to the configured Discord webhook."""
+    webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
+    _app_logger.info(f"[discord] test requested, webhook configured: {bool(webhook_url)}")
+    if not webhook_url:
+        _app_logger.error("[discord] test failed — DISCORD_WEBHOOK_URL not set")
+        raise HTTPException(status_code=400, detail="DISCORD_WEBHOOK_URL not configured")
+    import urllib.request as ur
+    payload = json.dumps({
+        "embeds": [{
+            "title": "✅ ELLIE — Discord Connected",
+            "description": "Notifications are working. Signal changes, fund reviews, and weekly reports will appear here.",
+            "color": 5763719,
+        }]
+    }).encode()
+    try:
+        req = ur.Request(webhook_url, data=payload, headers={
+            "Content-Type": "application/json",
+            "User-Agent": "DiscordBot (https://github.com, 1.0)",
+        }, method="POST")
+        ur.urlopen(req, timeout=10)
+        _app_logger.info("[discord] test message sent OK")
+        return {"ok": True}
+    except Exception as e:
+        _app_logger.error(f"[discord] test failed — {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+def _discord_analysis_embed(ticker: str, signal: str, entry_price, reasoning: str, provider: str, date: str):
+    emoji = SIGNAL_EMOJI.get(signal, "⬜")
+    plain = SIGNAL_PLAIN.get(signal, signal)
+    snippet = " ".join(reasoning.split()[:60]) + "…" if reasoning else "—"
+    price_str = f"${entry_price:.2f}" if entry_price else "—"
+    _send_discord_webhook(
+        title=f"{emoji} {ticker} — {plain}",
+        description=f"**Analysis complete** for {ticker} on {date}",
+        signal=signal,
+        fields=[
+            {"name": "Signal",      "value": plain,     "inline": True},
+            {"name": "Entry Price", "value": price_str, "inline": True},
+            {"name": "Provider",    "value": provider,  "inline": True},
+            {"name": "Key Insight", "value": snippet,   "inline": False},
+        ],
+        footer=f"TradingAgents · {date}",
+    )
+
+
+def _chat_with_llm(question: str) -> str:
+    """Answer a question about the portfolio using LLM + portfolio context."""
+    try:
+        from tradingagents.llm_clients.factory import create_llm_client
+        from langchain_core.messages import HumanMessage, SystemMessage
+
+        provider = os.environ.get("_TA_DISCORD_PROVIDER", "google")
+        model    = os.environ.get("_TA_DISCORD_MODEL",    "gemini-2.5-flash")
+        client   = create_llm_client(provider, model)
+        llm      = client.get_llm()
+
+        runs  = _load_portfolio()[:10]
+        summary = "\n".join(
+            f"- {r['ticker']} ({r['trade_date']}): {r.get('signal','?')} @ ${r.get('entry_price') or '?'}"
+            for r in runs
+        ) or "No runs yet."
+
+        system = (
+            "You are a personal stock analysis assistant. You have access to the user's recent "
+            "TradingAgents analysis results below. Answer questions clearly and concisely. "
+            "Do not recommend illegal activity. Always remind the user this is not financial advice.\n\n"
+            f"Recent analyses:\n{summary}"
+        )
+        response = llm.invoke([SystemMessage(content=system), HumanMessage(content=question)])
+        return getattr(response, "content", str(response))[:1900]
+    except Exception as exc:
+        return f"Sorry, I couldn't process that: {exc}"
+
+
+def _run_discord_bot():
+    """Run a discord.py bot in its own event loop (called from a daemon thread)."""
+    token      = os.environ.get("DISCORD_BOT_TOKEN", "").strip()
+    channel_id = os.environ.get("DISCORD_CHANNEL_ID", "").strip()
+    if not token:
+        return
+
+    try:
+        import discord
+    except ImportError:
+        return
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    intents = discord.Intents.default()
+    intents.message_content = True
+    client = discord.Client(intents=intents)
+
+    @client.event
+    async def on_ready():
+        print(f"[Discord] Bot online as {client.user}")
+
+    @client.event
+    async def on_message(message):
+        if message.author == client.user:
+            return
+
+        text = message.content.strip()
+        lower = text.lower()
+
+        # Only respond in the configured channel (if set) or DMs
+        if channel_id and str(message.channel.id) != channel_id:
+            if not isinstance(message.channel, discord.DMChannel):
+                return
+
+        if lower.startswith("!analyze "):
+            parts = text.split()
+            ticker = parts[1].upper() if len(parts) > 1 else ""
+            if not ticker:
+                await message.channel.send("Usage: `!analyze TICKER`")
+                return
+            await message.channel.send(f"🔍 Analyzing **{ticker}**… This takes a few minutes. I'll post the result here.")
+            # Run in the monitor executor (background thread)
+            def _do_analyze():
+                from tradingagents.graph.trading_graph import TradingAgentsGraph
+                from tradingagents.default_config import DEFAULT_CONFIG
+                from tradingagents.agents.utils.agent_states import InvestDebateState, RiskDebateState
+                from tradingagents.dataflows.config import set_config
+                provider = os.environ.get("_TA_DISCORD_PROVIDER", "google")
+                deep     = os.environ.get("_TA_DISCORD_DEEP",     "gemini-2.5-pro")
+                quick    = os.environ.get("_TA_DISCORD_QUICK",    "gemini-2.5-flash")
+                config = DEFAULT_CONFIG.copy()
+                config.update({"llm_provider": provider, "deep_think_llm": deep,
+                               "quick_think_llm": quick, "max_debate_rounds": 1, "max_risk_discuss_rounds": 1})
+                ta = TradingAgentsGraph(debug=False, config=config)
+                set_config(config)
+                date = datetime.utcnow().strftime("%Y-%m-%d")
+                past_context = ta.memory_log.get_past_context(ticker)
+                init_state = {
+                    "messages": [("human", ticker)], "company_of_interest": ticker,
+                    "trade_date": date, "past_context": past_context,
+                    "investment_debate_state": InvestDebateState(
+                        bull_history="", bear_history="", history="",
+                        current_response="", judge_decision="", count=0),
+                    "risk_debate_state": RiskDebateState(
+                        aggressive_history="", conservative_history="", neutral_history="",
+                        history="", latest_speaker="", current_aggressive_response="",
+                        current_conservative_response="", current_neutral_response="",
+                        judge_decision="", count=0),
+                    "market_report": "", "fundamentals_report": "", "sentiment_report": "", "news_report": "",
+                }
+                final_state = None
+                for chunk in ta.graph.stream(init_state, stream_mode="updates",
+                                             config={"recursion_limit": config.get("max_recur_limit", 100)}):
+                    for node_name, state_delta in chunk.items():
+                        if node_name == "Portfolio Manager" and isinstance(state_delta, dict):
+                            final_state = state_delta
+                if not final_state:
+                    return None, "Analysis produced no result."
+                raw = final_state.get("final_trade_decision", "")
+                sig = ta.process_signal(raw)
+                price = _get_current_price(ticker)
+                return {"signal": sig, "reasoning": raw, "price": price, "date": date}, None
+
+            result, err = await loop.run_in_executor(_monitor_executor, _do_analyze)
+            if err:
+                await message.channel.send(f"❌ Error: {err}")
+            else:
+                emoji = SIGNAL_EMOJI.get(result["signal"], "⬜")
+                plain = SIGNAL_PLAIN.get(result["signal"], result["signal"])
+                price_str = f"${result['price']:.2f}" if result["price"] else "—"
+                snippet = " ".join(result["reasoning"].split()[:80]) + "…"
+                await message.channel.send(
+                    f"{emoji} **{ticker} — {plain}** (@ {price_str})\n\n{snippet}"
+                )
+
+        elif lower.startswith("!portfolio"):
+            runs = _load_portfolio()[:8]
+            if not runs:
+                await message.channel.send("📂 No analysis runs yet. Use `!analyze TICKER` to start.")
+                return
+            lines = [f"**Recent Analyses**"]
+            for r in runs:
+                emoji = SIGNAL_EMOJI.get(r.get("signal"), "⬜")
+                lines.append(f"{emoji} **{r['ticker']}** ({r['trade_date']}) — {SIGNAL_PLAIN.get(r.get('signal',''), r.get('signal','?'))}")
+            await message.channel.send("\n".join(lines))
+
+        elif lower.startswith("!ask ") or lower.startswith("!chat "):
+            question = text[5:].strip()
+            await message.channel.send("💭 Thinking…")
+            answer = await loop.run_in_executor(None, _chat_with_llm, question)
+            await message.channel.send(f"💡 {answer}")
+
+        elif lower == "!help":
+            await message.channel.send(
+                "**TradingAgents Bot Commands**\n"
+                "`!analyze TICKER` — Run a full AI analysis\n"
+                "`!portfolio` — Show recent analysis results\n"
+                "`!ask <question>` — Ask anything about your portfolio\n"
+                "`!help` — Show this message\n\n"
+                "*Note: this is not financial advice.*"
+            )
+
+    try:
+        loop.run_until_complete(client.start(token))
+    except Exception as exc:
+        print(f"[Discord] Bot error: {exc}")
+
+
+# ── Market data endpoint ─────────────────────────────────────────────────────
+
+@app.get("/market-data/{ticker}")
+async def get_market_data(ticker: str, period: str = "3mo"):
+    import yfinance as yf
+    try:
+        t = yf.Ticker(ticker.upper())
+        hist = t.history(period=period)
+        prices = [
+            {
+                "date": str(idx.date()),
+                "open":  round(float(r["Open"]),  2),
+                "high":  round(float(r["High"]),  2),
+                "low":   round(float(r["Low"]),   2),
+                "close": round(float(r["Close"]), 2),
+                "volume": int(r["Volume"]),
+            }
+            for idx, r in hist.iterrows()
+        ]
+        info = t.info
+        metrics = {
+            "name":           info.get("longName", ticker),
+            "current_price":  info.get("currentPrice") or info.get("regularMarketPrice"),
+            "trailing_pe":    info.get("trailingPE"),
+            "forward_pe":     info.get("forwardPE"),
+            "market_cap":     info.get("marketCap"),
+            "week_52_high":   info.get("fiftyTwoWeekHigh"),
+            "week_52_low":    info.get("fiftyTwoWeekLow"),
+            "beta":           info.get("beta"),
+            "dividend_yield": info.get("dividendYield"),
+            "profit_margins": info.get("profitMargins"),
+            "revenue_growth": info.get("revenueGrowth"),
+            "total_revenue":  info.get("totalRevenue"),
+        }
+        news_raw = t.news or []
+        news = []
+        for n in news_raw[:8]:
+            c = n.get("content", {})
+            title = c.get("title", "")
+            source = c.get("provider", {}).get("displayName", "Yahoo Finance")
+            url = c.get("canonicalUrl", {}).get("url", "")
+            if title:
+                news.append({"title": title, "source": source, "url": url})
+        return {"ticker": ticker.upper(), "prices": prices, "metrics": metrics, "news": news}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Discover endpoint ─────────────────────────────────────────────────────────
+
+def _discover_stocks_sync(llm_provider: str, model: str, theme: str, count: int, exclude: list = None, investment_style: str = "mixed") -> list:
+    import random
+    from tradingagents.llm_clients.factory import create_llm_client
+    from langchain_core.messages import HumanMessage
+
+    client = create_llm_client(llm_provider, model)
+    llm = client.get_llm()
+
+    style_lines = {
+        "longterm":  "Focus on long-term holds (1–5+ years): strong balance sheets, durable competitive moats, consistent earnings growth, and reasonable valuations. Avoid highly speculative or momentum-only plays.",
+        "shortterm": "Focus on short-term catalysts (days to weeks): upcoming earnings, analyst upgrades, technical breakouts, M&A rumors, macro events. Prioritize momentum and near-term price drivers.",
+        "mixed":     "Balance long-term quality with short-term catalysts. Include both durable compounders and near-term momentum plays.",
+    }
+    style_line = style_lines.get(investment_style, style_lines["mixed"])
+
+    theme_line = (
+        f"Theme focus: {theme.strip()}."
+        if theme.strip()
+        else "Cover a diverse mix of sectors and market caps."
+    )
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+
+    # Sector rotation — pick 3 random sectors to force variety
+    all_sectors = [
+        "Healthcare & Biotech", "Financials & Banking", "Energy & Clean Energy",
+        "Industrials & Defense", "Consumer Discretionary & Retail",
+        "Consumer Staples & Food", "Materials & Mining", "Real Estate & REITs",
+        "Utilities", "Semiconductors", "Software & SaaS", "E-commerce & Marketplaces",
+        "Cybersecurity", "Cloud Infrastructure", "Transportation & Logistics",
+        "Media & Entertainment", "Telecom", "Agriculture & Commodities",
+    ]
+    focus_sectors = random.sample(all_sectors, min(3, len(all_sectors)))
+    sector_line = f"Prioritize these sectors this time: {', '.join(focus_sectors)}."
+
+    # Exclude already-held or recently-picked tickers
+    exclude_clean = [t.upper().strip() for t in (exclude or []) if t]
+    exclude_line = (
+        f"Do NOT include these tickers (already held or recently analyzed): {', '.join(exclude_clean)}."
+        if exclude_clean else ""
+    )
+
+    # Add a random "lens" so the model doesn't always give the same answer
+    lenses = [
+        "Focus on under-the-radar small and mid-cap names, not mega-caps.",
+        "Avoid the top 20 S&P 500 names by market cap. Find less-covered opportunities.",
+        "Look for companies with recent analyst upgrades or positive earnings surprises.",
+        "Look for contrarian plays — beaten-down stocks with improving fundamentals.",
+        "Find companies with upcoming earnings catalysts in the next 30 days.",
+        "Focus on dividend growers with strong free cash flow.",
+        "Look for companies benefiting from recent macro shifts (rates, inflation, AI adoption).",
+        "Find stocks that have pulled back 15-30% from highs but have strong business momentum.",
+    ]
+    lens_line = random.choice(lenses)
+
+    prompt = f"""You are a senior equity analyst with a contrarian streak. Today is {today}.
+{style_line}
+{theme_line}
+{sector_line}
+{lens_line}
+{exclude_line}
+
+Identify {count} US-listed stocks worth a deep fundamental analysis RIGHT NOW.
+Be specific and varied — do NOT default to NVDA, AAPL, MSFT, AMZN, GOOGL, META, TSLA unless there is a very specific, timely catalyst.
+Consider recent earnings surprises, upcoming catalysts, sector momentum, news events, and valuation.
+
+Respond ONLY with a JSON array — no markdown, no explanation, just the array:
+[
+  {{"ticker":"AAPL","company":"Apple Inc","sector":"Technology","reason":"One concise sentence explaining why this stock is worth analyzing today"}},
+  ...
+]"""
+
+    response = llm.invoke([HumanMessage(content=prompt)])
+    content = getattr(response, "content", str(response))
+
+    match = re.search(r'\[.*?\]', content, re.DOTALL)
+    if not match:
+        return []
+    try:
+        picks = json.loads(match.group())
+        results = [
+            {
+                "ticker": p.get("ticker", "").upper().strip(),
+                "company": p.get("company", ""),
+                "sector": p.get("sector", ""),
+                "reason": p.get("reason", ""),
+            }
+            for p in picks
+            if p.get("ticker") and p.get("ticker", "").upper().strip() not in exclude_clean
+        ]
+        # Shuffle slightly so we don't always analyze in the same order
+        random.shuffle(results)
+        return results[:count]
+    except Exception:
+        return []
+
+
+@app.post("/discover")
+async def discover_stocks(request: DiscoverRequest):
+    loop = asyncio.get_event_loop()
+    picks = await loop.run_in_executor(
+        None,
+        _discover_stocks_sync,
+        request.llm_provider,
+        request.model,
+        request.theme,
+        request.count,
+    )
+    return {"picks": picks}
+
+
+# ── Monitor background runner ─────────────────────────────────────────────────
+
+def _run_analysis_for_monitor(monitor_id: str):
+    """Synchronously run a full analysis for a monitor entry, update state + alerts."""
+    try:
+        mon = _load_monitors()
+        monitor = next((m for m in mon["monitors"] if m["id"] == monitor_id), None)
+        if not monitor:
+            return
+
+        from tradingagents.graph.trading_graph import TradingAgentsGraph
+        from tradingagents.default_config import DEFAULT_CONFIG
+        from tradingagents.agents.utils.agent_states import InvestDebateState, RiskDebateState
+        from tradingagents.dataflows.config import set_config
+
+        ticker = monitor["ticker"]
+        date = datetime.utcnow().strftime("%Y-%m-%d")
+
+        config = DEFAULT_CONFIG.copy()
+        config["llm_provider"]       = monitor["llm_provider"]
+        config["deep_think_llm"]     = monitor["deep_think_llm"]
+        config["quick_think_llm"]    = monitor["quick_think_llm"]
+        config["max_debate_rounds"]  = 1
+        config["max_risk_discuss_rounds"] = 1
+
+        ta = TradingAgentsGraph(debug=False, config=config)
+        set_config(config)
+
+        past_context = ta.memory_log.get_past_context(ticker)
+        init_state = {
+            "messages": [("human", ticker)],
+            "company_of_interest": ticker,
+            "trade_date": date,
+            "past_context": past_context,
+            "investment_debate_state": InvestDebateState(
+                bull_history="", bear_history="", history="",
+                current_response="", judge_decision="", count=0,
+            ),
+            "risk_debate_state": RiskDebateState(
+                aggressive_history="", conservative_history="", neutral_history="",
+                history="", latest_speaker="", current_aggressive_response="",
+                current_conservative_response="", current_neutral_response="",
+                judge_decision="", count=0,
+            ),
+            "market_report": "", "fundamentals_report": "",
+            "sentiment_report": "", "news_report": "",
+        }
+
+        final_state = None
+        for chunk in ta.graph.stream(init_state, stream_mode="updates",
+                                     config={"recursion_limit": config.get("max_recur_limit", 100)}):
+            for node_name, state_delta in chunk.items():
+                if node_name == "Portfolio Manager" and isinstance(state_delta, dict):
+                    final_state = state_delta
+
+        if final_state is None:
+            raise RuntimeError("No final state from graph")
+
+        raw_decision = final_state.get("final_trade_decision", "")
+        signal = ta.process_signal(raw_decision)
+        current_price = _get_current_price(ticker)
+        now = datetime.utcnow()
+
+        mon = _load_monitors()
+        prev_signal = None
+        for m in mon["monitors"]:
+            if m["id"] == monitor_id:
+                prev_signal = m.get("last_signal")
+                m["last_checked_at"] = now.isoformat()
+                m["next_check_at"]   = (now + timedelta(hours=monitor["interval_hours"])).isoformat()
+                m["last_signal"]     = signal
+                m["last_price"]      = current_price
+                m["is_running"]      = False
+                m.pop("last_error", None)
+                break
+
+        signal_changed = prev_signal is None or prev_signal != signal
+        if signal_changed:
+            verb = "signal detected" if prev_signal is None else f"changed from {prev_signal} to {signal}"
+            mon.setdefault("alerts", []).insert(0, {
+                "id":         str(uuid.uuid4()),
+                "monitor_id": monitor_id,
+                "ticker":     ticker,
+                "signal":     signal,
+                "prev_signal": prev_signal,
+                "price":      current_price,
+                "ts":         now.isoformat(),
+                "read":       False,
+                "message":    f"{ticker} {verb}",
+            })
+            mon["alerts"] = mon["alerts"][:100]
+
+        _save_monitors(mon)
+
+        # Send Discord alert when signal changes
+        if signal_changed:
+            _discord_analysis_embed(
+                ticker, signal, current_price, raw_decision,
+                monitor["llm_provider"], date,
+            )
+
+    except Exception as exc:
+        now = datetime.utcnow()
+        try:
+            mon = _load_monitors()
+            for m in mon["monitors"]:
+                if m["id"] == monitor_id:
+                    m["is_running"]    = False
+                    m["next_check_at"] = (now + timedelta(hours=1)).isoformat()
+                    m["last_error"]    = str(exc)[:300]
+            _save_monitors(mon)
+        except Exception:
+            pass
+
+
+async def _monitor_scheduler():
+    """Every 5 min: find due monitors and run them in the thread pool."""
+    loop = asyncio.get_event_loop()
+    while True:
+        await asyncio.sleep(300)
+        try:
+            mon = _load_monitors()
+            now = datetime.utcnow()
+            due_ids = []
+            for m in mon["monitors"]:
+                if m.get("is_running"):
+                    continue
+                nxt = m.get("next_check_at")
+                if not nxt or datetime.fromisoformat(nxt) <= now:
+                    due_ids.append(m["id"])
+
+            if due_ids:
+                mon = _load_monitors()
+                for m in mon["monitors"]:
+                    if m["id"] in due_ids:
+                        m["is_running"] = True
+                _save_monitors(mon)
+                for mid in due_ids:
+                    await loop.run_in_executor(_monitor_executor, _run_analysis_for_monitor, mid)
+        except Exception:
+            pass
+
+
+# ── Scout / Autonomous Agent ──────────────────────────────────────────────────
+
+def _run_scout_cycle():
+    """Discover candidate stocks and run full analysis; save BUY recommendations."""
+    scout = _load_scout()
+    cfg = scout["config"]
+
+    try:
+        from tradingagents.graph.trading_graph import TradingAgentsGraph
+        from tradingagents.default_config import DEFAULT_CONFIG
+        from tradingagents.agents.utils.agent_states import InvestDebateState, RiskDebateState
+        from tradingagents.dataflows.config import set_config
+
+        date = datetime.utcnow().strftime("%Y-%m-%d")
+
+        # Discover ~2x the target count so we have extras if some fail
+        discover_count = min(int(cfg.get("max_stocks", 3)) * 2, 10)
+        picks = _discover_stocks_sync(
+            cfg["llm_provider"], cfg["quick_think_llm"],
+            cfg.get("theme", ""), discover_count,
+        )
+
+        new_recs = []
+
+        for pick in picks[:int(cfg.get("max_stocks", 3))]:
+            ticker = pick.get("ticker", "").upper().strip()
+            if not ticker:
+                continue
+            try:
+                ta_cfg = DEFAULT_CONFIG.copy()
+                ta_cfg.update({
+                    "llm_provider":            cfg["llm_provider"],
+                    "deep_think_llm":          cfg["deep_think_llm"],
+                    "quick_think_llm":         cfg["quick_think_llm"],
+                    "max_debate_rounds":       1,
+                    "max_risk_discuss_rounds": 1,
+                })
+                ta = TradingAgentsGraph(debug=False, config=ta_cfg)
+                set_config(ta_cfg)
+
+                past_context = ta.memory_log.get_past_context(ticker)
+                init_state = {
+                    "messages": [("human", ticker)],
+                    "company_of_interest": ticker,
+                    "trade_date": date,
+                    "past_context": past_context,
+                    "investment_debate_state": InvestDebateState(
+                        bull_history="", bear_history="", history="",
+                        current_response="", judge_decision="", count=0,
+                    ),
+                    "risk_debate_state": RiskDebateState(
+                        aggressive_history="", conservative_history="", neutral_history="",
+                        history="", latest_speaker="", current_aggressive_response="",
+                        current_conservative_response="", current_neutral_response="",
+                        judge_decision="", count=0,
+                    ),
+                    "market_report": "", "fundamentals_report": "",
+                    "sentiment_report": "", "news_report": "",
+                }
+
+                final_state = None
+                for chunk in ta.graph.stream(
+                    init_state, stream_mode="updates",
+                    config={"recursion_limit": ta_cfg.get("max_recur_limit", 100)},
+                ):
+                    for node_name, state_delta in chunk.items():
+                        if node_name == "Portfolio Manager" and isinstance(state_delta, dict):
+                            final_state = state_delta
+
+                if not final_state:
+                    continue
+
+                raw = final_state.get("final_trade_decision", "")
+                signal = ta.process_signal(raw)
+                price = _get_current_price(ticker)
+                run_id = str(uuid.uuid4())
+                now_iso = datetime.utcnow().isoformat() + "Z"
+
+                # Always persist to portfolio
+                runs = _load_portfolio()
+                runs.insert(0, {
+                    "id": run_id, "ticker": ticker, "trade_date": date,
+                    "signal": signal, "reasoning": raw, "entry_price": price,
+                    "timestamp": now_iso,
+                    "provider": cfg["llm_provider"], "deep_model": cfg["deep_think_llm"],
+                })
+                _save_portfolio(runs[:200])
+
+                # Only surface BUY signals as recommendations
+                if signal in ("Buy", "Overweight"):
+                    new_recs.append({
+                        "id":      run_id,
+                        "ticker":  ticker,
+                        "company": pick.get("company", ""),
+                        "sector":  pick.get("sector", ""),
+                        "signal":  signal,
+                        "price":   price,
+                        "reasoning": raw,
+                        "ts":      now_iso,
+                    })
+                    _discord_analysis_embed(ticker, signal, price, raw, cfg["llm_provider"], date)
+
+            except Exception:
+                continue
+
+        now = datetime.utcnow()
+        scout = _load_scout()
+        scout["recommendations"] = (new_recs + scout.get("recommendations", []))[:100]
+        scout["last_run"]   = now.isoformat()
+        scout["next_run"]   = (now + timedelta(hours=float(cfg["interval_hours"]))).isoformat()
+        scout["is_running"] = False
+        scout["last_error"] = None
+        _save_scout(scout)
+
+    except Exception as exc:
+        scout = _load_scout()
+        scout["is_running"] = False
+        scout["last_error"] = str(exc)[:300]
+        _save_scout(scout)
+
+
+async def _scout_scheduler():
+    """Every 5 min: check if the scout cycle is due."""
+    loop = asyncio.get_event_loop()
+    while True:
+        await asyncio.sleep(300)
+        try:
+            scout = _load_scout()
+            if not scout["config"].get("enabled"):
+                continue
+            if scout.get("is_running"):
+                continue
+            next_run = scout.get("next_run")
+            if next_run and datetime.fromisoformat(next_run) > datetime.utcnow():
+                continue
+            scout["is_running"] = True
+            _save_scout(scout)
+            await loop.run_in_executor(_monitor_executor, _run_scout_cycle)
+        except Exception:
+            pass
+
+
+# ── Fund helper functions ─────────────────────────────────────────────────────
+
+_fund_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="fund")
+
+_ET_OFFSET = timedelta(hours=4)   # UTC−4 EDT (covers DST; NYSE uses ET)
+
+def _next_market_close() -> str:
+    """Return naive ISO string of the next weekday 4:00 PM ET (= 20:00 UTC during EDT)."""
+    now_utc = datetime.utcnow()
+    close_utc = now_utc.replace(hour=20, minute=0, second=0, microsecond=0)
+    if now_utc >= close_utc:
+        close_utc += timedelta(days=1)
+    # Skip weekends
+    while close_utc.weekday() >= 5:
+        close_utc += timedelta(days=1)
+    return close_utc.isoformat()  # no "Z" — keeps it naive to match datetime.utcnow()
+
+
+def _next_biweekly() -> str:
+    """Return naive ISO string 14 days from now at midnight UTC."""
+    return (datetime.utcnow() + timedelta(days=14)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ).isoformat()
+
+
+# ── Catalyst Watch ────────────────────────────────────────────────────────────
+
+def _load_backlog() -> list:
+    if BACKLOG_FILE.exists():
+        try:
+            return json.loads(BACKLOG_FILE.read_text())
+        except Exception:
+            return []
+    return []
+
+
+def _save_backlog(items: list):
+    BACKLOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    BACKLOG_FILE.write_text(json.dumps(items, indent=2))
+
+
+def _add_to_backlog(ticker: str, signal: str, price, qty: float, dollar_amount: float,
+                    source: str, reason: str = '', raw_decision: str = ''):
+    """Queue a pending buy when insufficient cash. Skips if ticker already pending."""
+    items = _load_backlog()
+    if any(b["ticker"] == ticker and b["status"] == "pending" for b in items):
+        _fund_log(f"Backlog: {ticker} already queued, skipping duplicate")
+        return
+    items.append({
+        "id":            str(uuid.uuid4())[:8],
+        "ticker":        ticker,
+        "signal":        signal,
+        "price":         price,
+        "qty":           qty,
+        "dollar_amount": round(float(dollar_amount), 2),
+        "source":        source,
+        "reason":        reason,
+        "status":        "pending",
+        "added_at":      datetime.utcnow().isoformat(),
+    })
+    _save_backlog(items)
+    _fund_log(f"Backlog: queued {ticker} (need ${dollar_amount:.0f}, source={source})")
+    _send_discord_webhook(
+        title=f"📋 ELLIE Buy Backlog — {ticker}",
+        description=(
+            f"Not enough cash to buy **{int(qty)} shares** of {ticker} (${dollar_amount:,.0f} needed).\n"
+            f"Added to buy queue. Auto-buy will execute when funds are available."
+        ),
+        signal="Hold",
+    )
+
+
+def _fund_buy_or_backlog(ticker: str, qty: float, price, signal: str, cfg: dict,
+                          source: str, reason: str = '', raw_decision: str = '') -> tuple:
+    """
+    Attempt to buy qty shares of ticker.
+    If cash is insufficient, queue in buy backlog instead.
+    Returns (bought: bool, order: dict | None).
+    """
+    if qty <= 0:
+        return False, None
+
+    dollar_needed = qty * float(price or 0) if price else 0
+
+    # Cash gate — never buy on margin or with negative cash
+    try:
+        account = alpaca_client.get_account()
+        cash = float(account.get("cash", 0))
+    except Exception:
+        cash = 0
+
+    if cash <= 0 or (dollar_needed > 0 and cash < dollar_needed):
+        _add_to_backlog(ticker, signal, price, qty, dollar_needed, source, reason, raw_decision)
+        _fund_log(f"Backlog: insufficient cash (${cash:.0f}) for {ticker} (${dollar_needed:.0f})")
+        return False, None
+
+    try:
+        order = alpaca_client.submit_order(ticker, "buy", qty=qty)
+        return True, order
+    except Exception as exc:
+        _fund_log(f"Order failed for {ticker}: {exc}")
+        # If order rejected for insufficient funds, backlog it
+        err = str(exc).lower()
+        if dollar_needed > 0 and any(k in err for k in ("insufficient", "buying power", "funds")):
+            _add_to_backlog(ticker, signal, price, qty, dollar_needed, source, reason, raw_decision)
+        return False, None
+
+
+def _run_backlog_autobuy():
+    """Execute pending backlog buys when cash is available. Called by scheduler."""
+    items = _load_backlog()
+    pending = [b for b in items if b["status"] == "pending"]
+    if not pending:
+        return
+    try:
+        account = alpaca_client.get_account()
+        cash = float(account.get("cash", 0))
+    except Exception:
+        return
+
+    bought_count = 0
+    for item in pending:
+        dollar_needed = float(item.get("dollar_amount", 0))
+        if dollar_needed <= 0 or cash < dollar_needed:
+            continue
+
+        ticker = item["ticker"]
+        qty    = float(item["qty"])
+        price  = item.get("price")
+
+        try:
+            order = alpaca_client.submit_order(ticker, "buy", qty=qty)
+            item["status"]    = "bought"
+            item["bought_at"] = datetime.utcnow().isoformat()
+            item["order_id"]  = order.get("id", "")
+            cash -= dollar_needed
+            bought_count += 1
+            _fund_log(f"Backlog auto-buy: {qty} shares of {ticker}")
+            _log_portfolio_action(ticker, "BUY", qty, price, item.get("signal", "Buy"),
+                                  reasoning=item.get("reason", ""), order_id=order.get("id", ""))
+            _send_discord_webhook(
+                title=f"📋 ELLIE Backlog Buy — {ticker}",
+                description=f"Auto-purchased **{int(qty)} shares** of {ticker} from buy queue (${dollar_needed:,.0f})",
+                signal="Buy",
+            )
+        except Exception as exc:
+            _fund_log(f"Backlog auto-buy failed for {ticker}: {exc}")
+
+    _save_backlog(items)
+    if bought_count:
+        _fund_log(f"Backlog: executed {bought_count} queued buy(s)")
+
+
+def _load_catalysts() -> list:
+    if CATALYST_FILE.exists():
+        try:
+            return json.loads(CATALYST_FILE.read_text())
+        except Exception:
+            pass
+    return []
+
+def _save_catalysts(data: list):
+    CATALYST_FILE.parent.mkdir(parents=True, exist_ok=True)
+    CATALYST_FILE.write_text(json.dumps(data, indent=2))
+
+def _fetch_earnings_date(ticker: str) -> str | None:
+    """Try to fetch next earnings date via yfinance. Returns YYYY-MM-DD or None."""
+    try:
+        import yfinance as yf
+        t = yf.Ticker(ticker)
+        cal = t.calendar
+        if cal is None:
+            return None
+        dates = cal.get("Earnings Date", []) if isinstance(cal, dict) else []
+        today = datetime.utcnow().date()
+        future = []
+        for d in (dates if hasattr(dates, "__iter__") else []):
+            try:
+                if hasattr(d, "date"):
+                    d = d.date()
+                elif isinstance(d, str):
+                    from datetime import date as _date
+                    d = datetime.fromisoformat(d).date()
+                if d >= today:
+                    future.append(d)
+            except Exception:
+                pass
+        return str(min(future)) if future else None
+    except Exception:
+        return None
+
+
+def _run_catalyst_scan():
+    """
+    Autonomously discover upcoming earnings/IPO catalysts for the next 2 weeks.
+    Uses Finnhub if key is set, otherwise asks the AI. Runs weekly.
+    Stores interesting candidates in the catalyst watch list.
+    """
+    try:
+        fund = _load_fund()
+        cfg  = fund["config"]
+        _fund_log("Catalyst scan started")
+
+        today     = datetime.utcnow().date()
+        in_2_weeks = today + timedelta(days=14)
+        candidates = []  # list of {ticker, company, event_type, event_date, reason}
+
+        # ── Try Finnhub earnings calendar ──────────────────────────────────────
+        finnhub_key = os.getenv("FINNHUB_API_KEY", "").strip()
+        if finnhub_key:
+            try:
+                import urllib.request as _ur
+                url = (f"https://finnhub.io/api/v1/calendar/earnings"
+                       f"?from={today}&to={in_2_weeks}&token={finnhub_key}")
+                with _ur.urlopen(url, timeout=10) as r:
+                    data = json.loads(r.read())
+                earnings = data.get("earningsCalendar", [])
+                # Filter to US equities with a reasonable estimate
+                for e in earnings:
+                    ticker = (e.get("symbol") or "").upper().strip()
+                    date_str = e.get("date", "")
+                    if not ticker or not date_str:
+                        continue
+                    candidates.append({
+                        "ticker":     ticker,
+                        "company":    e.get("company", ticker),
+                        "event_type": "earnings",
+                        "event_date": date_str,
+                        "reason":     f"Earnings report — est. EPS {e.get('epsEstimate', '?')}",
+                        "source":     "finnhub",
+                    })
+                _fund_log(f"Finnhub returned {len(candidates)} upcoming earnings")
+            except Exception as exc:
+                _fund_log(f"Finnhub fetch failed: {exc}; falling back to AI")
+                candidates = []
+
+        # ── Fallback: ask AI for interesting upcoming catalysts ─────────────────
+        if not candidates:
+            from tradingagents.llm_clients.factory import create_llm_client
+            from langchain_core.messages import HumanMessage
+            style_hint = cfg.get("investment_style", "mixed")
+            today_str  = str(today)
+            cutoff_str = str(in_2_weeks)
+            client = create_llm_client(cfg.get("llm_provider", "google"),
+                                       cfg.get("quick_think_llm", "gemini-2.5-flash"))
+            llm = client.get_llm()
+            prompt = f"""You are a market research agent. Today is {today_str}.
+List US-listed stocks that have earnings calls, IPO pricings, or major analyst days scheduled between {today_str} and {cutoff_str}.
+Investment style preference: {style_hint}.
+Focus on names where the catalyst could be a significant price mover.
+Respond ONLY with a JSON array, no markdown:
+[{{"ticker":"SMCI","company":"Super Micro Computer","event_type":"earnings","event_date":"YYYY-MM-DD","reason":"One sentence on why this catalyst matters"}}]
+Include up to 15 entries. Use real upcoming dates you are confident about."""
+            resp = llm.invoke([HumanMessage(content=prompt)])
+            content = getattr(resp, "content", str(resp))
+            match = re.search(r'\[.*?\]', content, re.DOTALL)
+            if match:
+                try:
+                    raw = json.loads(match.group())
+                    for item in raw:
+                        ticker = (item.get("ticker") or "").upper().strip()
+                        if ticker:
+                            candidates.append({
+                                "ticker":     ticker,
+                                "company":    item.get("company", ticker),
+                                "event_type": item.get("event_type", "earnings"),
+                                "event_date": item.get("event_date", str(in_2_weeks)),
+                                "reason":     item.get("reason", ""),
+                                "source":     "ai",
+                            })
+                except Exception:
+                    pass
+            _fund_log(f"AI suggested {len(candidates)} upcoming catalysts")
+
+        if not candidates:
+            _fund_log("Catalyst scan: no candidates found")
+            return
+
+        # ── Ask AI to rank/filter the candidates ───────────────────────────────
+        from tradingagents.llm_clients.factory import create_llm_client
+        from langchain_core.messages import HumanMessage
+        style_hint = cfg.get("investment_style", "mixed")
+        client = create_llm_client(cfg.get("llm_provider", "google"),
+                                   cfg.get("quick_think_llm", "gemini-2.5-flash"))
+        llm = client.get_llm()
+        # Keep top candidates to avoid huge prompts
+        sample = candidates[:40]
+        already_watching = {c["ticker"] for c in _load_catalysts() if c.get("status") == "watching"}
+        held = {p.get("symbol", "") for p in alpaca_client.get_positions()}
+        exclude = already_watching | held
+
+        prompt2 = f"""You are a senior equity analyst. Investment style: {style_hint}.
+From the upcoming catalysts below, pick up to 8 that are most likely to be significant positive movers.
+Exclude these tickers (already held or already watching): {', '.join(exclude) or 'none'}.
+Candidates:
+{json.dumps(sample, indent=2)}
+
+Respond ONLY with a JSON array of the tickers you select (keep all their original fields, just return the chosen subset):
+[...]"""
+        resp2 = llm.invoke([HumanMessage(content=prompt2)])
+        content2 = getattr(resp2, "content", str(resp2))
+        match2 = re.search(r'\[.*?\]', content2, re.DOTALL)
+        chosen = []
+        if match2:
+            try:
+                chosen = json.loads(match2.group())
+            except Exception:
+                pass
+        if not chosen:
+            chosen = sample[:8]  # fallback: take first 8
+
+        # ── For AI-sourced dates, verify with yfinance ─────────────────────────
+        existing = _load_catalysts()
+        existing_tickers = {c["ticker"] for c in existing}
+        added = 0
+        for item in chosen:
+            ticker = (item.get("ticker") or "").upper().strip()
+            if not ticker or ticker in existing_tickers:
+                continue
+            event_date = item.get("event_date", "")
+            if item.get("source") == "ai" or not event_date:
+                fetched = _fetch_earnings_date(ticker)
+                if fetched:
+                    event_date = fetched
+            if not event_date:
+                event_date = str(in_2_weeks)  # best guess if nothing found
+            existing.append({
+                "id":           str(uuid.uuid4()),
+                "ticker":       ticker,
+                "company":      item.get("company", ticker),
+                "event_type":   item.get("event_type", "earnings"),
+                "event_date":   event_date,
+                "reason":       item.get("reason", ""),
+                "status":       "watching",
+                "added_at":     datetime.utcnow().isoformat() + "Z",
+                "triggered_at": None,
+                "result_signal": None,
+                "auto_discovered": True,
+            })
+            existing_tickers.add(ticker)
+            added += 1
+
+        _save_catalysts(existing)
+
+        # Update next scan time (weekly)
+        fund = _load_fund()
+        fund["next_catalyst_scan"] = (datetime.utcnow() + timedelta(days=7)).replace(
+            hour=20, minute=0, second=0, microsecond=0
+        ).isoformat()
+        fund["last_catalyst_scan"] = datetime.utcnow().isoformat()
+        _save_fund(fund)
+
+        _fund_log(f"Catalyst scan complete — added {added} new catalyst(s) to watch")
+        if added:
+            names = ", ".join(
+                c["ticker"] for c in existing
+                if c.get("status") == "watching" and c.get("auto_discovered")
+            )[-200:]
+            _send_discord_webhook(
+                title="📡 ELLIE Catalyst Scan Complete",
+                description=f"Now watching **{added}** upcoming catalyst(s): {names}",
+            )
+
+    except Exception as exc:
+        _fund_log(f"Catalyst scan error: {exc}")
+
+
+def _run_catalyst_check():
+    """
+    Check if any watched catalysts have reached their event date.
+    For each triggered one, run full analysis and buy if signal is good.
+    Runs in the scheduler shortly after market close each day.
+    """
+    import time as _time
+    try:
+        catalysts = _load_catalysts()
+        today = datetime.utcnow().date()
+        fund  = _load_fund()
+        cfg   = fund["config"]
+
+        pending = [
+            c for c in catalysts
+            if c.get("status") == "watching"
+            and c.get("event_date")
+            and datetime.fromisoformat(c["event_date"]).date() <= today
+        ]
+
+        if not pending:
+            return
+
+        _fund_log(f"Catalyst check: {len(pending)} event(s) triggered today")
+        account  = alpaca_client.get_account()
+        held     = {p.get("symbol", "") for p in alpaca_client.get_positions()}
+
+        for i, cat in enumerate(pending):
+            ticker = cat["ticker"]
+            if i > 0:
+                _fund_log(f"Cooling down 75s before analyzing {ticker}…")
+                _time.sleep(75)
+
+            cat["status"]       = "triggered"
+            cat["triggered_at"] = datetime.utcnow().isoformat() + "Z"
+            _save_catalysts(catalysts)
+
+            try:
+                _fund_log(f"Catalyst triggered: {ticker} ({cat.get('event_type','event')}) — running analysis")
+                signal, raw_decision, price = _run_analysis_simple(ticker, cfg)
+                cat["result_signal"] = signal
+
+                if signal in ("Buy", "Overweight") and ticker not in held:
+                    qty = alpaca_client.calculate_position_size(
+                        ticker, cfg.get("position_pct", 5.0) / 100
+                    )
+                    bought, order = _fund_buy_or_backlog(
+                        ticker, qty, price, signal, cfg,
+                        source="catalyst",
+                        reason=cat.get("reason", ""),
+                        raw_decision=raw_decision,
+                    )
+                    if bought:
+                        cat["status"] = "bought"
+                        _fund_log(f"Catalyst buy: {qty} shares of {ticker} after {cat.get('event_type','event')}")
+                        _log_portfolio_action(ticker, "BUY", qty, price, signal, reasoning=raw_decision)
+                        _send_discord_webhook(
+                            title=f"📡 ELLIE Catalyst Buy — {ticker}",
+                            description=(
+                                f"**{cat.get('event_type','Event').title()}** triggered analysis → **{signal}**\n"
+                                f"Purchased **{qty} shares** @ ${price or '?'}\n"
+                                f"_{cat.get('reason', '')}_"
+                            ),
+                            signal="Buy",
+                        )
+                    else:
+                        # Either backlisted or qty=0
+                        cat["status"] = "skipped" if qty <= 0 else "watching"
+                        _fund_log(f"{ticker}: position size 0 or insufficient cash, skipped/backlisted")
+                elif signal in ("Buy", "Overweight") and ticker in held:
+                    cat["status"] = "skipped"
+                    _fund_log(f"{ticker}: already held, skipping catalyst buy")
+                else:
+                    cat["status"] = "skipped"
+                    _fund_log(f"{ticker}: catalyst signal={signal}, no action taken")
+
+            except Exception as exc:
+                cat["status"] = "skipped"
+                _fund_log(f"Catalyst analysis error for {ticker}: {exc}")
+
+            _save_catalysts(catalysts)
+
+    except Exception as exc:
+        _fund_log(f"Catalyst check error: {exc}")
+
+
+def _fund_log(msg: str):
+    """Append a timestamped log entry to the fund state, capped at 200 entries."""
+    _app_logger.info(f"[fund] {msg}")
+    fund = _load_fund()
+    entry = {"ts": datetime.utcnow().isoformat() + "Z", "msg": msg}
+    fund.setdefault("log", []).insert(0, entry)
+    fund["log"] = fund["log"][:200]
+    _save_fund(fund)
+
+
+def _log_portfolio_action(ticker: str, action: str, qty, price, signal: str, reasoning: str = "", order_id: str = ""):
+    """Append a buy/sell/hold event to the portfolio history file."""
+    history = []
+    if PORTFOLIO_HISTORY_FILE.exists():
+        try:
+            history = json.loads(PORTFOLIO_HISTORY_FILE.read_text())
+        except Exception:
+            pass
+    entry = {
+        "ts": datetime.utcnow().isoformat() + "Z",
+        "ticker": ticker,
+        "action": action,       # "BUY", "SELL", "ADD", "HOLD"
+        "qty": qty,
+        "price": price,
+        "signal": signal,
+        "reasoning": (reasoning or "")[:800],
+        "order_id": order_id or "",
+    }
+    history.insert(0, entry)
+    PORTFOLIO_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    PORTFOLIO_HISTORY_FILE.write_text(json.dumps(history[:300], indent=2))
+
+
+# Fallback model chains per provider — tried in order when a 429 is hit.
+# Each entry is (deep_think_llm, quick_think_llm).
+_MODEL_FALLBACKS: dict[str, list[tuple[str, str]]] = {
+    "google": [
+        ("gemini-2.5-pro",   "gemini-2.5-flash"),
+        ("gemini-2.5-flash", "gemini-2.5-flash"),
+        ("gemini-2.0-flash", "gemini-2.0-flash"),
+    ],
+    "openai": [
+        ("gpt-4o",      "gpt-4o-mini"),
+        ("gpt-4o-mini", "gpt-4o-mini"),
+    ],
+    "anthropic": [
+        ("claude-opus-4-7",   "claude-haiku-4-5-20251001"),
+        ("claude-haiku-4-5-20251001", "claude-haiku-4-5-20251001"),
+    ],
+}
+
+
+def _run_analysis_simple(ticker: str, cfg: dict, max_retries: int = 3):
+    """
+    Run TradingAgentsGraph for a single ticker using cfg's llm settings.
+    Returns (signal, raw_decision, price).
+    On a 429, rotates through the model fallback chain immediately (no sleep).
+    Only sleeps if every model in the chain is exhausted.
+    """
+    import time
+    from tradingagents.graph.trading_graph import TradingAgentsGraph
+    from tradingagents.default_config import DEFAULT_CONFIG
+    from tradingagents.agents.utils.agent_states import InvestDebateState, RiskDebateState
+    from tradingagents.dataflows.config import set_config
+
+    date = datetime.utcnow().strftime("%Y-%m-%d")
+    provider = cfg.get("llm_provider", "google")
+
+    # Build rotation list: configured model first, then fallbacks
+    fallbacks = _MODEL_FALLBACKS.get(provider, [])
+    configured = (cfg.get("deep_think_llm", "gemini-2.5-pro"), cfg.get("quick_think_llm", "gemini-2.5-flash"))
+    # Put configured first, then any fallbacks not already tried
+    rotation = [configured] + [f for f in fallbacks if f != configured]
+
+    model_idx = 0
+
+    for attempt in range(max_retries + len(rotation)):
+        deep, quick = rotation[min(model_idx, len(rotation) - 1)]
+
+        ta_cfg = DEFAULT_CONFIG.copy()
+        ta_cfg.update({
+            "llm_provider":            provider,
+            "deep_think_llm":          deep,
+            "quick_think_llm":         quick,
+            "max_debate_rounds":       1,
+            "max_risk_discuss_rounds": 1,
+        })
+
+        try:
+            ta = TradingAgentsGraph(debug=False, config=ta_cfg)
+            set_config(ta_cfg)
+
+            past_context = ta.memory_log.get_past_context(ticker)
+            init_state = {
+                "messages": [("human", ticker)],
+                "company_of_interest": ticker,
+                "trade_date": date,
+                "past_context": past_context,
+                "investment_debate_state": InvestDebateState(
+                    bull_history="", bear_history="", history="",
+                    current_response="", judge_decision="", count=0,
+                ),
+                "risk_debate_state": RiskDebateState(
+                    aggressive_history="", conservative_history="", neutral_history="",
+                    history="", latest_speaker="", current_aggressive_response="",
+                    current_conservative_response="", current_neutral_response="",
+                    judge_decision="", count=0,
+                ),
+                "market_report": "", "fundamentals_report": "",
+                "sentiment_report": "", "news_report": "",
+            }
+
+            final_state = None
+            for chunk in ta.graph.stream(
+                init_state, stream_mode="updates",
+                config={"recursion_limit": ta_cfg.get("max_recur_limit", 100)},
+            ):
+                for node_name, state_delta in chunk.items():
+                    if node_name == "Portfolio Manager" and isinstance(state_delta, dict):
+                        final_state = state_delta
+
+            if not final_state:
+                raise RuntimeError(f"No final state from graph for {ticker}")
+
+            raw_decision = final_state.get("final_trade_decision", "")
+            signal = ta.process_signal(raw_decision)
+            price = _get_current_price(ticker)
+            return signal, raw_decision, price
+
+        except Exception as exc:
+            exc_str = str(exc)
+            is_rate_limit = "RESOURCE_EXHAUSTED" in exc_str or "429" in exc_str or "quota" in exc_str.lower()
+            if is_rate_limit:
+                next_idx = model_idx + 1
+                if next_idx < len(rotation):
+                    # Rotate to next model immediately — no sleep
+                    next_deep, next_quick = rotation[next_idx]
+                    _fund_log(f"{ticker}: rate limited on {deep} — rotating to {next_deep}")
+                    _send_discord_webhook(
+                        title=f"⚡ Model Rotated — {ticker}",
+                        description=f"Rate limit hit on **{deep}**. Switching to **{next_deep}**.",
+                        signal="Hold",
+                    )
+                    model_idx = next_idx
+                    continue
+                else:
+                    # All models exhausted — wait 60s then retry the last one
+                    _fund_log(f"{ticker}: all models rate limited — waiting 60s…")
+                    _send_discord_webhook(
+                        title=f"⏳ All Models Rate Limited — {ticker}",
+                        description=f"Every model in the rotation hit its quota. Waiting **60s** then retrying with **{deep}**.",
+                        signal="Hold",
+                    )
+                    time.sleep(60)
+                    continue
+            else:
+                _fund_log(f"Error analyzing {ticker}: {exc}")
+                _send_discord_webhook(
+                    title=f"❌ Analysis Failed — {ticker}",
+                    description=f"```{str(exc)[:800]}```",
+                    signal="",
+                )
+                raise
+
+
+def _run_fund_launch():
+    """Discover stocks, analyze them, buy BUY signals. Runs in thread pool."""
+    try:
+        fund = _load_fund()
+        cfg = fund["config"]
+
+        fund["active"] = True
+        fund["launched_at"] = datetime.utcnow().isoformat() + "Z"
+        _save_fund(fund)
+        _fund_log("Fund launch started")
+
+        # Enable auto_trade in alpaca config
+        alpaca_cfg = _load_alpaca_config()
+        alpaca_cfg["auto_trade"] = True
+        alpaca_cfg["position_pct"] = cfg.get("position_pct", 5.0)
+        _save_alpaca_config(alpaca_cfg)
+
+        initial_count = int(cfg.get("initial_stocks", 5))
+        target = initial_count
+        # Exclude already-held positions so we don't double-buy
+        held_symbols = [p.get("symbol", "") for p in alpaca_client.get_positions()]
+        picks = _discover_stocks_sync(
+            cfg.get("llm_provider", "google"),
+            cfg.get("quick_think_llm", "gemini-2.5-flash"),
+            cfg.get("scout_theme", ""),
+            initial_count * 3,
+            exclude=held_symbols,
+            investment_style=cfg.get("investment_style", "mixed"),
+        )
+
+        bought = 0
+        for i, pick in enumerate(picks):
+            if bought >= target:
+                break
+            ticker = pick.get("ticker", "").upper().strip()
+            if not ticker:
+                continue
+            # Cooldown between analyses to avoid Gemini rate limits (1M tokens/min cap)
+            if i > 0:
+                import time as _time
+                _fund_log(f"Cooling down 75s before next analysis…")
+                _time.sleep(75)
+            try:
+                _fund_log(f"Analyzing {ticker}…")
+                signal, raw_decision, price = _run_analysis_simple(ticker, cfg)
+                _fund_log(f"{ticker}: signal={signal}, price=${price}")
+
+                if signal in ("Buy", "Overweight"):
+                    position_pct = cfg.get("position_pct", 5.0)
+                    qty = alpaca_client.calculate_position_size(ticker, position_pct / 100)
+                    ok, order = _fund_buy_or_backlog(
+                        ticker, qty, price, signal, cfg,
+                        source="launch", raw_decision=raw_decision,
+                    )
+                    if ok:
+                        bought += 1
+                        _fund_log(f"Bought {qty} shares of {ticker} (order {order.get('id', '?')})")
+                        _log_portfolio_action(ticker, "BUY", qty, price, signal, reasoning=raw_decision, order_id=order.get("id", ""))
+                        _send_discord_webhook(
+                            title=f"🏦 ELLIE Fund — BUY {ticker}",
+                            description=f"Purchased **{qty} shares** of {ticker} @ ${price or '?'}",
+                            signal="Buy",
+                            fields=[
+                                {"name": "Order ID", "value": order.get("id", "?"), "inline": True},
+                                {"name": "Position %", "value": f"{position_pct}%", "inline": True},
+                            ],
+                        )
+                    else:
+                        _fund_log(f"Skipped/backlisted {ticker}: qty={qty}")
+                else:
+                    _fund_log(f"Skipped {ticker}: signal was {signal}")
+            except Exception as exc:
+                _fund_log(f"Error analyzing {ticker}: {exc}")
+                _send_discord_webhook(
+                    title=f"⚠️ Fund — Skipped {ticker}",
+                    description=f"Error during analysis: {str(exc)[:500]}",
+                    signal="",
+                )
+                continue
+
+        now = datetime.utcnow()
+        next_daily = _next_market_close()
+        # Next Sunday midnight UTC
+        days_until_sunday = (6 - now.weekday()) % 7 or 7
+        next_sunday = (now + timedelta(days=days_until_sunday)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ).isoformat()
+
+        fund = _load_fund()
+        fund["active"] = True
+        fund["next_daily_review"] = next_daily
+        fund["next_biweekly_analysis"] = _next_biweekly()
+        fund["next_weekly_report"] = next_sunday
+        _save_fund(fund)
+
+        _fund_log(f"Fund launch complete — purchased {bought} position(s)")
+        _send_discord_webhook(
+            title="🚀 ELLIE Fund Launched",
+            description=f"Autonomous fund is live — purchased **{bought}** initial position(s).",
+            signal="Buy",
+            footer=f"Next daily review: {next_daily[:10]}",
+        )
+
+    except Exception as exc:
+        _fund_log(f"Fund launch error: {exc}")
+        _send_discord_webhook(
+            title="🚨 Fund Launch Failed",
+            description=f"```{str(exc)[:800]}```",
+            signal="",
+        )
+        try:
+            fund = _load_fund()
+            now = datetime.utcnow()
+            fund["active"] = True
+            if not fund.get("next_daily_review"):
+                fund["next_daily_review"] = _next_market_close()
+            if not fund.get("next_biweekly_analysis"):
+                fund["next_biweekly_analysis"] = _next_biweekly()
+            if not fund.get("next_weekly_report"):
+                days_until_sunday = (6 - now.weekday()) % 7 or 7
+                fund["next_weekly_report"] = (now + timedelta(days=days_until_sunday)).replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                ).isoformat() + "Z"
+            _save_fund(fund)
+        except Exception:
+            pass
+
+
+def _run_daily_review():
+    """
+    Snapshot report of today's portfolio performance. No AI, no trades.
+    Flags any position down >15% from entry as a watch item.
+    Runs in thread pool — completes in seconds.
+    """
+    try:
+        _fund_log("Daily review started")
+
+        account   = alpaca_client.get_account()
+        positions = alpaca_client.get_positions()
+        now       = datetime.utcnow()
+
+        equity      = float(account.get("equity") or 0)
+        last_equity = float(account.get("last_equity") or equity)
+        cash        = float(account.get("cash") or 0)
+        day_pnl     = equity - last_equity
+        day_pnl_pct = (day_pnl / last_equity * 100) if last_equity else 0
+
+        lines = [
+            f"**Portfolio:** ${equity:,.2f}  ({day_pnl:+,.2f} / {day_pnl_pct:+.2f}% today)",
+            f"**Cash:** ${cash:,.2f}",
+            "",
+            f"**Positions ({len(positions)}):**",
+        ]
+
+        watch_flags = []
+        for pos in positions:
+            sym      = pos.get("symbol", "?")
+            mkt_val  = float(pos.get("market_value") or 0)
+            unrl     = float(pos.get("unrealized_pl") or 0)
+            unrl_pct = float(pos.get("unrealized_plpc") or 0) * 100
+            today_pl = float(pos.get("unrealized_intraday_pl") or 0)
+
+            flag = ""
+            if unrl_pct <= -15:
+                flag = " ⚠️"
+                watch_flags.append(f"{sym} is down {unrl_pct:.1f}% from entry")
+
+            lines.append(
+                f"  • **{sym}**: ${mkt_val:,.2f}  "
+                f"(total P&L: {unrl:+,.2f} / {unrl_pct:+.1f}%){flag}"
+            )
+
+        if watch_flags:
+            lines.append("")
+            lines.append("**⚠️ Watch:**")
+            for w in watch_flags:
+                lines.append(f"  • {w}")
+
+        if not positions:
+            lines.append("  No open positions.")
+
+        _send_discord_webhook(
+            title="📋 ELLIE Daily Snapshot",
+            description="\n".join(lines)[:1900],
+            footer=f"{now.strftime('%Y-%m-%d %H:%M')} UTC · no trades made",
+        )
+
+        fund = _load_fund()
+        fund["last_daily_review"] = now.isoformat()
+        fund["next_daily_review"] = _next_market_close()
+        _save_fund(fund)
+        _fund_log("Daily review complete")
+
+
+    except Exception as exc:
+        _fund_log(f"Daily review error: {exc}")
+        _send_discord_webhook(
+            title="🚨 Daily Snapshot Failed",
+            description=f"```{str(exc)[:800]}```",
+            signal="",
+        )
+
+
+def _run_news_check():
+    """
+    Daily news scan on all open positions.
+
+    Sell logic:
+      - Position UP or flat  → sell immediately on Sell/Underweight signal (lock gains)
+      - Position NEGATIVE + catastrophic news (fraud, SEC, bankruptcy)
+                             → sell immediately regardless of P&L
+      - Position NEGATIVE + regular bad news
+                             → enter 'patient sell' mode:
+                               · Wait up to 5 days for a better exit
+                               · Sell early if price recovers ≥3% from flag price
+                               · Sell early if price drops another ≥5% (cut losses)
+                               · Sell unconditionally after 5 days
+
+    Add logic:
+      - Buy/Overweight signal + held ≥3 days → add shares (up to max_position_pct)
+
+    Anti-day-trade guard: 3-day cooldown per symbol between news-triggered trades.
+    """
+    import time as _time
+    import yfinance as yf
+    from tradingagents.llm_clients.factory import create_llm_client
+    from langchain_core.messages import HumanMessage
+
+    # ── helpers ──────────────────────────────────────────────────────────────
+    def _is_catastrophic(llm, symbol: str, news_reason: str) -> bool:
+        """Ask the LLM whether news is company-existential (fraud, SEC, bankruptcy…)."""
+        prompt = (
+            f"Is the following news about {symbol} catastrophic in the sense that it poses "
+            f"an existential or near-term severe risk to the company — such as confirmed fraud, "
+            f"SEC enforcement action, bankruptcy filing, criminal investigation, major product recall "
+            f"with liability, or delisting?\n\n"
+            f"News: {news_reason}\n\n"
+            f"Reply with ONLY: CATASTROPHIC or NOT_CATASTROPHIC"
+        )
+        try:
+            r = llm.invoke([HumanMessage(content=prompt)])
+            return r.content.strip().upper().startswith("CATASTROPHIC")
+        except Exception:
+            return False  # default: don't panic-sell
+
+    def _execute_sell(symbol, pos, price, signal, raw_decision, days_held, unrl_pct, label, news_reason):
+        alpaca_client.close_position(symbol)
+        _fund_log(f"News sell [{label}]: closed {symbol} after {days_held}d | P&L {unrl_pct:+.1f}% — {news_reason}")
+        _log_portfolio_action(symbol, "SELL", pos.get("qty"), price, signal,
+                              reasoning=f"[NEWS/{label}] {news_reason}\n{raw_decision}")
+        _send_discord_webhook(
+            title=f"📰 News Sell ({label}) — {symbol}",
+            description=(
+                f"**Signal:** {signal}\n"
+                f"**News:** {news_reason}\n"
+                f"**Held:** {days_held}d  |  P&L: {unrl_pct:+.1f}%"
+            ),
+            signal="sell",
+        )
+
+    # ── main body ─────────────────────────────────────────────────────────────
+    try:
+        fund = _load_fund()
+        cfg  = fund["config"]
+        positions = alpaca_client.get_positions()
+        pos_by_symbol = {p.get("symbol", ""): p for p in positions}
+
+        now_dt       = datetime.utcnow()
+        provider     = cfg.get("llm_provider", "google")
+        quick_model  = cfg.get("quick_think_llm", "gemini-2.5-flash")
+        client       = create_llm_client(provider, quick_model)
+        llm          = client.get_llm()
+        news_actions = fund.get("news_trade_dates", {})    # {symbol: ISO ts}
+        patient_sells = fund.get("patient_sells", {})      # {symbol: {flagged_at, flagged_price, ...}}
+
+        # ── Step 1: resolve any existing patient-sell positions ────────────────
+        resolved = []
+        for symbol, ps in list(patient_sells.items()):
+            pos = pos_by_symbol.get(symbol)
+            if not pos:
+                # Position already gone
+                resolved.append(symbol)
+                continue
+            try:
+                flagged_price = float(ps.get("flagged_price", 0))
+                flagged_at    = datetime.fromisoformat(ps["flagged_at"])
+                days_waiting  = (now_dt - flagged_at).days
+                current_price = float(pos.get("current_price") or pos.get("avg_entry_price") or flagged_price)
+                unrl_pct      = float(pos.get("unrealized_plpc") or 0) * 100
+                news_reason   = ps.get("news_reason", "bad news")
+                days_held     = ps.get("days_held", 0)
+
+                pct_change = ((current_price - flagged_price) / flagged_price * 100) if flagged_price else 0
+
+                if pct_change >= 3.0:
+                    _fund_log(f"{symbol}: patient sell — price recovered {pct_change:+.1f}% → selling at better price")
+                    _execute_sell(symbol, pos, current_price, "Sell", ps.get("raw_decision", ""),
+                                  days_held, unrl_pct, "patient/recovered", news_reason)
+                    news_actions[symbol] = now_dt.isoformat()
+                    resolved.append(symbol)
+                elif pct_change <= -5.0:
+                    _fund_log(f"{symbol}: patient sell — price dropped another {pct_change:.1f}% → cutting losses")
+                    _execute_sell(symbol, pos, current_price, "Sell", ps.get("raw_decision", ""),
+                                  days_held, unrl_pct, "patient/cut-losses", news_reason)
+                    news_actions[symbol] = now_dt.isoformat()
+                    resolved.append(symbol)
+                elif days_waiting >= 5:
+                    _fund_log(f"{symbol}: patient sell — max wait reached ({days_waiting}d) → selling now")
+                    _execute_sell(symbol, pos, current_price, "Sell", ps.get("raw_decision", ""),
+                                  days_held, unrl_pct, "patient/timeout", news_reason)
+                    news_actions[symbol] = now_dt.isoformat()
+                    resolved.append(symbol)
+                else:
+                    _fund_log(f"{symbol}: patient sell — waiting ({days_waiting}d, {pct_change:+.1f}% from flag price)")
+                    _send_discord_webhook(
+                        title=f"⏳ Watching {symbol} for Exit",
+                        description=(
+                            f"**Day {days_waiting}/5** in patient-sell mode\n"
+                            f"Price vs flag: {pct_change:+.1f}%  |  P&L: {unrl_pct:+.1f}%\n"
+                            f"Will sell if: recovers +3% or drops -5% or 5 days pass"
+                        ),
+                        signal="",
+                    )
+            except Exception as exc:
+                _fund_log(f"{symbol}: patient sell check error — {exc}")
+
+        for sym in resolved:
+            patient_sells.pop(sym, None)
+
+        # ── Step 2: scan positions for new significant news ────────────────────
+        if not pos_by_symbol:
+            _fund_log("News check: no open positions")
+        else:
+            _fund_log(f"News check: scanning {len(pos_by_symbol)} position(s)…")
+
+            significant = []
+
+            for symbol, pos in pos_by_symbol.items():
+                # Skip if already in patient-sell mode
+                if symbol in patient_sells:
+                    continue
+
+                # 3-day cooldown
+                last_ts = news_actions.get(symbol, "")
+                if last_ts:
+                    try:
+                        if (now_dt - datetime.fromisoformat(last_ts)).days < 3:
+                            _fund_log(f"{symbol}: news cooldown — skipping")
+                            continue
+                    except Exception:
+                        pass
+
+                # Fetch headlines
+                try:
+                    t         = yf.Ticker(symbol)
+                    news_raw  = t.news or []
+                    headlines = [
+                        n.get("content", {}).get("title", "")
+                        for n in news_raw[:10]
+                        if n.get("content", {}).get("title", "")
+                    ]
+                    if not headlines:
+                        continue
+                    news_text = "\n".join(f"- {h}" for h in headlines[:8])
+                except Exception as exc:
+                    _fund_log(f"{symbol}: news fetch error — {exc}")
+                    continue
+
+                # Significance screen — also classifies direction so we don't
+                # trigger a sell-path analysis on positive news (or vice versa).
+                prompt = (
+                    f"You are a portfolio risk manager. A fund holds shares of {symbol}.\n"
+                    f"Review these recent news headlines and decide if any are significant enough "
+                    f"to warrant portfolio action (adding or reducing the position).\n\n"
+                    f"SIGNIFICANT means: earnings beat/miss, major analyst upgrade/downgrade "
+                    f"(≥$10 price-target change), M&A announcement, major regulatory action, "
+                    f"product recall, fraud/accounting concern, or macro shock specific to {symbol}.\n\n"
+                    f"NOT significant: routine coverage, minor commentary, general market/sector "
+                    f"pieces that don't specifically affect {symbol}.\n\n"
+                    f"If significant, also classify the sentiment direction:\n"
+                    f"  POSITIVE — news is clearly good for the stock (upgrade, beat, buyout premium, etc.)\n"
+                    f"  NEGATIVE — news is clearly bad (miss, downgrade, fraud, recall, etc.)\n"
+                    f"  MIXED    — meaningful news but direction is ambiguous\n\n"
+                    f"Headlines:\n{news_text}\n\n"
+                    f"Reply with ONLY one of:\n"
+                    f"- SIGNIFICANT_POSITIVE: [one sentence on the key event]\n"
+                    f"- SIGNIFICANT_NEGATIVE: [one sentence on the key event]\n"
+                    f"- SIGNIFICANT_MIXED: [one sentence on the key event]\n"
+                    f"- NOT_SIGNIFICANT"
+                )
+                try:
+                    response = llm.invoke([HumanMessage(content=prompt)])
+                    result   = response.content.strip().upper()
+                    if result.startswith("SIGNIFICANT"):
+                        # Parse direction
+                        if "POSITIVE" in result.split(":")[0]:
+                            direction = "positive"
+                        elif "NEGATIVE" in result.split(":")[0]:
+                            direction = "negative"
+                        else:
+                            direction = "mixed"
+                        reason = response.content.strip().split(":", 1)[-1].strip() if ":" in response.content else response.content.strip()
+                        _fund_log(f"{symbol}: significant {direction} news — {reason}")
+                        significant.append((symbol, pos, reason, direction))
+                except Exception as exc:
+                    _fund_log(f"{symbol}: news screen error — {exc}")
+                    continue
+
+            if not significant:
+                _fund_log("News check: no significant news found")
+            else:
+                _fund_log(f"News check: {len(significant)} position(s) flagged — running analysis…")
+
+                account         = alpaca_client.get_account()
+                portfolio_value = float(account.get("portfolio_value") or account.get("equity") or 0)
+                orders          = alpaca_client.get_orders(limit=50)
+
+                buy_dates: dict[str, datetime] = {}
+                for order in orders:
+                    if order.get("side") == "buy" and order.get("status") == "filled":
+                        sym = order.get("symbol", "")
+                        ts  = order.get("filled_at") or order.get("created_at") or ""
+                        if sym and ts:
+                            try:
+                                dt = datetime.fromisoformat(ts.replace("Z", ""))
+                                if sym not in buy_dates or dt < buy_dates[sym]:
+                                    buy_dates[sym] = dt
+                            except Exception:
+                                pass
+
+                for i, (symbol, pos, news_reason, news_direction) in enumerate(significant):
+                    if i > 0:
+                        _fund_log(f"Cooling down 60s before analyzing {symbol}…")
+                        _time.sleep(60)
+                    try:
+                        signal, raw_decision, price = _run_analysis_simple(symbol, cfg)
+                        _discord_analysis_embed(
+                            ticker=symbol, signal=signal, entry_price=price,
+                            reasoning=raw_decision,
+                            provider=cfg.get("llm_provider", "google"),
+                            date=now_dt.strftime("%Y-%m-%d"),
+                        )
+
+                        unrl_pct     = float(pos.get("unrealized_plpc") or 0) * 100
+                        market_value = float(pos.get("market_value") or 0)
+                        current_pct  = (market_value / portfolio_value * 100) if portfolio_value > 0 else 0
+                        first_buy    = buy_dates.get(symbol)
+                        days_held    = (now_dt - first_buy).days if first_buy else 999
+
+                        # Direction guard: don't act against the news sentiment.
+                        # Positive news → only act on Buy/Overweight signals.
+                        # Negative news → only act on Sell/Underweight signals.
+                        # Mixed news    → trust the full analysis signal either way.
+                        if news_direction == "positive" and signal in ("Sell", "Underweight"):
+                            _fund_log(f"{symbol}: positive news but signal={signal} — holding (news contradicts signal)")
+                            continue
+                        if news_direction == "negative" and signal in ("Buy", "Overweight"):
+                            _fund_log(f"{symbol}: negative news but signal={signal} — holding (news contradicts signal)")
+                            continue
+
+                        if signal in ("Sell", "Underweight"):
+                            if unrl_pct >= 0:
+                                # Up or flat → sell immediately, lock in gains
+                                _execute_sell(symbol, pos, price, signal, raw_decision,
+                                              days_held, unrl_pct, "immediate", news_reason)
+                                news_actions[symbol] = now_dt.isoformat()
+
+                            else:
+                                # Negative position — be patient unless catastrophic
+                                if _is_catastrophic(llm, symbol, news_reason):
+                                    _fund_log(f"{symbol}: catastrophic news — selling immediately despite loss")
+                                    _execute_sell(symbol, pos, price, signal, raw_decision,
+                                                  days_held, unrl_pct, "catastrophic", news_reason)
+                                    news_actions[symbol] = now_dt.isoformat()
+                                else:
+                                    # Enter patient-sell mode
+                                    patient_sells[symbol] = {
+                                        "flagged_at":    now_dt.isoformat(),
+                                        "flagged_price": price,
+                                        "news_reason":   news_reason,
+                                        "raw_decision":  raw_decision,
+                                        "signal":        signal,
+                                        "days_held":     days_held,
+                                        "unrl_pct_at_flag": unrl_pct,
+                                    }
+                                    _fund_log(
+                                        f"{symbol}: bad news but down {unrl_pct:.1f}% — entering patient-sell mode "
+                                        f"(will wait up to 5d for better price)"
+                                    )
+                                    _send_discord_webhook(
+                                        title=f"⏳ Patient Sell Queued — {symbol}",
+                                        description=(
+                                            f"**Signal:** {signal}  |  **P&L:** {unrl_pct:+.1f}%\n"
+                                            f"**News:** {news_reason}\n\n"
+                                            f"Position is negative — waiting up to 5 days for a better exit.\n"
+                                            f"Will sell early if price recovers +3% or drops another -5%."
+                                        ),
+                                        signal="",
+                                    )
+
+                        elif signal in ("Buy", "Overweight") and days_held >= 3:
+                            max_pct = cfg.get("max_position_pct", 15.0)
+                            if current_pct < max_pct:
+                                add_pct = min(cfg.get("position_pct", 5.0), max_pct - current_pct)
+                                qty     = alpaca_client.calculate_position_size(symbol, add_pct / 100)
+                                if qty > 0:
+                                    ok, order = _fund_buy_or_backlog(
+                                        symbol, qty, price, signal, cfg,
+                                        source="news", reason=news_reason, raw_decision=raw_decision,
+                                    )
+                                    if ok:
+                                        _fund_log(f"News add: +{qty} shares of {symbol} — {news_reason}")
+                                        _log_portfolio_action(symbol, "ADD", qty, price, signal,
+                                                              reasoning=f"[NEWS] {news_reason}\n{raw_decision}")
+                                        news_actions[symbol] = now_dt.isoformat()
+                                        _send_discord_webhook(
+                                            title=f"📰 News-Triggered Buy — {symbol}",
+                                            description=(
+                                                f"**Signal:** {signal}\n"
+                                                f"**News:** {news_reason}\n"
+                                                f"**Added:** {qty} shares at ~${price:.2f}"
+                                            ),
+                                            signal="buy",
+                                        )
+                                else:
+                                    _fund_log(f"{symbol}: news positive but at max position")
+                            else:
+                                _fund_log(f"{symbol}: news positive but at max position size")
+
+                        else:
+                            note = f"signal={signal}"
+                            if signal in ("Buy", "Overweight") and days_held < 3:
+                                note += f", only {days_held}d held (min 3d for adds)"
+                            _fund_log(f"{symbol}: significant news but holding — {note}")
+
+                    except Exception as exc:
+                        _fund_log(f"News analysis error for {symbol}: {exc}")
+                        continue
+
+        # Persist state
+        fund = _load_fund()
+        fund["news_trade_dates"] = news_actions
+        fund["patient_sells"]    = patient_sells
+        _save_fund(fund)
+        _fund_log("News check complete")
+
+    except Exception as exc:
+        _fund_log(f"News check error: {exc}")
+        _send_discord_webhook(
+            title="🚨 News Check Failed",
+            description=f"```{str(exc)[:800]}```",
+        )
+
+
+def _run_biweekly_analysis():
+    """
+    AI analysis of every held position + trade decisions.
+    Respects min_hold_days; emergency override if down >15% after 3+ days.
+    Runs in thread pool every 14 days.
+    """
+    import time as _time
+    try:
+        fund = _load_fund()
+        cfg = fund["config"]
+        _fund_log("Bi-weekly analysis started")
+
+        account   = alpaca_client.get_account()
+        positions = alpaca_client.get_positions()
+        orders    = alpaca_client.get_orders(limit=50)
+        min_hold  = int(cfg.get("min_hold_days", 14))
+
+        buy_dates: dict[str, datetime] = {}
+        for order in orders:
+            if order.get("side") == "buy" and order.get("status") == "filled":
+                sym = order.get("symbol", "")
+                filled_at_str = order.get("filled_at") or order.get("created_at") or ""
+                if sym and filled_at_str:
+                    try:
+                        filled_at = datetime.fromisoformat(filled_at_str.replace("Z", ""))
+                        if sym not in buy_dates or filled_at < buy_dates[sym]:
+                            buy_dates[sym] = filled_at
+                    except Exception:
+                        pass
+
+        now_dt = datetime.utcnow()
+        portfolio_value = float(account.get("portfolio_value") or account.get("equity") or 0)
+
+        for i, pos in enumerate(positions):
+            symbol = pos.get("symbol", "")
+            if not symbol:
+                continue
+            if i > 0:
+                _fund_log(f"Cooling down 75s before analyzing {symbol}…")
+                _time.sleep(75)
+            try:
+                unrl_pct  = float(pos.get("unrealized_plpc") or 0) * 100
+                first_buy = buy_dates.get(symbol)
+                days_held = (now_dt - first_buy).days if first_buy else 999
+                emergency = days_held >= 3 and unrl_pct <= -15
+
+                if days_held < min_hold and not emergency:
+                    _fund_log(f"{symbol}: holding — only {days_held}d in (min {min_hold}d)")
+                    continue
+
+                signal, raw_decision, price = _run_analysis_simple(symbol, cfg)
+                _discord_analysis_embed(
+                    ticker=symbol, signal=signal, entry_price=price,
+                    reasoning=raw_decision,
+                    provider=cfg.get("llm_provider", "google"),
+                    date=now_dt.strftime("%Y-%m-%d"),
+                )
+
+                market_value = float(pos.get("market_value") or 0)
+                current_pct  = (market_value / portfolio_value * 100) if portfolio_value > 0 else 0
+
+                if signal in ("Sell", "Underweight"):
+                    alpaca_client.close_position(symbol)
+                    reason = "emergency exit" if emergency else f"signal after {days_held}d hold"
+                    _fund_log(f"Sold {symbol} — {reason}")
+                    _log_portfolio_action(symbol, "SELL", pos.get("qty"), price, signal, reasoning=raw_decision)
+                elif signal in ("Buy", "Overweight"):
+                    max_pct = cfg.get("max_position_pct", 15.0)
+                    if current_pct < max_pct:
+                        add_pct = min(cfg.get("position_pct", 5.0), max_pct - current_pct)
+                        qty = alpaca_client.calculate_position_size(symbol, add_pct / 100)
+                        if qty > 0:
+                            ok, order = _fund_buy_or_backlog(symbol, qty, price, signal, cfg,
+                                                             source="biweekly", raw_decision=raw_decision)
+                            if ok:
+                                _fund_log(f"Added {qty} shares to {symbol} after {days_held}d hold")
+                                _log_portfolio_action(symbol, "ADD", qty, price, signal, reasoning=raw_decision)
+                        else:
+                            _fund_log(f"Holding {symbol} — at max position")
+                    else:
+                        _fund_log(f"Holding {symbol} — already at max position size")
+                else:
+                    _fund_log(f"Holding {symbol} — signal={signal} after {days_held}d")
+
+            except Exception as exc:
+                _fund_log(f"Error analyzing {symbol}: {exc}")
+                continue
+
+        fund = _load_fund()
+        fund["last_biweekly_analysis"] = now_dt.isoformat()
+        fund["next_biweekly_analysis"] = _next_biweekly()
+        _save_fund(fund)
+        _fund_log("Bi-weekly analysis complete")
+
+    except Exception as exc:
+        _fund_log(f"Bi-weekly analysis error: {exc}")
+        _send_discord_webhook(
+            title="🚨 Bi-Weekly Analysis Failed",
+            description=f"```{str(exc)[:800]}```",
+            signal="",
+        )
+
+
+def _run_weekly_report():
+    """Build and send a weekly performance summary to Discord. No AI, no trades."""
+    try:
+        fund = _load_fund()
+        cfg = fund["config"]
+        _fund_log("Weekly report started")
+
+        account   = alpaca_client.get_account()
+        positions = alpaca_client.get_positions()
+
+        portfolio_value = account.get("portfolio_value") or account.get("equity") or 0
+        cash = account.get("cash") or 0
+        daily_pnl = account.get("equity") and account.get("last_equity") and (
+            float(account["equity"]) - float(account["last_equity"])
+        )
+
+        lines = [
+            f"**Portfolio Value:** ${float(portfolio_value):,.2f}",
+            f"**Cash:** ${float(cash):,.2f}",
+            f"**Today P&L:** ${daily_pnl:+,.2f}" if daily_pnl is not None else "**Today P&L:** —",
+            "",
+            f"**Open Positions ({len(positions)}):**",
+        ]
+        for pos in positions:
+            sym     = pos.get("symbol", "?")
+            unrl    = pos.get("unrealized_pl") or 0
+            unrl_pct = pos.get("unrealized_plpc") or 0
+            lines.append(
+                f"  • {sym}: ${float(pos.get('market_value') or 0):,.2f} "
+                f"(P&L: ${float(unrl):+,.2f} / {float(unrl_pct)*100:+.1f}%)"
+            )
+
+        report_body = "\n".join(lines)
+
+        _send_discord_webhook(
+            title="📊 ELLIE Weekly Report",
+            description=report_body[:1900],
+            footer=f"Generated {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC",
+        )
+        _fund_log("Weekly report sent to Discord")
+
+        # Optional: discover and buy a new stock
+        if cfg.get("weekly_new_buy", True):
+            try:
+                _fund_log("Discovering new stock for weekly buy…")
+                held_symbols_list = [p.get("symbol", "") for p in positions]
+                new_picks = _discover_stocks_sync(
+                    cfg.get("llm_provider", "google"),
+                    cfg.get("quick_think_llm", "gemini-2.5-flash"),
+                    cfg.get("scout_theme", ""),
+                    5,
+                    exclude=held_symbols_list,
+                    investment_style=cfg.get("investment_style", "mixed"),
+                )
+                for j, pick in enumerate(new_picks):
+                    ticker = pick.get("ticker", "").upper().strip()
+                    if not ticker:
+                        continue
+                    # Skip if already holding (double-check)
+                    if ticker in held_symbols_list:
+                        continue
+                    if j > 0:
+                        import time as _time
+                        _fund_log(f"Cooling down 75s before analyzing {ticker}…")
+                        _time.sleep(75)
+                    signal, raw_decision, price = _run_analysis_simple(ticker, cfg)
+                    if signal in ("Buy", "Overweight"):
+                        qty = alpaca_client.calculate_position_size(
+                            ticker, cfg.get("position_pct", 5.0) / 100
+                        )
+                        ok, order = _fund_buy_or_backlog(
+                            ticker, qty, price, signal, cfg,
+                            source="weekly", raw_decision=raw_decision,
+                        )
+                        if ok:
+                            _fund_log(f"Weekly new buy: {qty} shares of {ticker}")
+                            _send_discord_webhook(
+                                title=f"🏦 ELLIE Weekly New Buy — {ticker}",
+                                description=f"Purchased **{qty} shares** of {ticker} @ ${price or '?'}",
+                                signal="Buy",
+                            )
+                        break
+            except Exception as exc:
+                _fund_log(f"Weekly new buy error: {exc}")
+
+        now = datetime.utcnow()
+        days_until_sunday = (6 - now.weekday()) % 7 or 7
+        next_sunday = (now + timedelta(days=days_until_sunday)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ).isoformat()
+
+        fund = _load_fund()
+        fund["last_weekly_report"] = now.isoformat()
+        fund["next_weekly_report"] = next_sunday
+        _save_fund(fund)
+        _fund_log("Weekly report complete")
+
+    except Exception as exc:
+        _fund_log(f"Weekly report error: {exc}")
+        _send_discord_webhook(
+            title="🚨 Weekly Report Failed",
+            description=f"```{str(exc)[:800]}```",
+            signal="",
+        )
+
+
+async def _fund_scheduler():
+    """Every 5 min: check if daily review, bi-weekly analysis, weekly report, or catalyst tasks are due."""
+    loop = asyncio.get_event_loop()
+    while True:
+        await asyncio.sleep(300)
+        try:
+            fund = _load_fund()
+            if not fund.get("active"):
+                continue
+
+            now = datetime.utcnow()
+
+            # Backlog auto-buy check (runs every scheduler tick if enabled)
+            if fund.get("config", {}).get("auto_buy_backlog", False):
+                backlog = _load_backlog()
+                if any(b["status"] == "pending" for b in backlog):
+                    await loop.run_in_executor(_fund_executor, _run_backlog_autobuy)
+
+            # Daily snapshot
+            next_daily = fund.get("next_daily_review")
+            if next_daily:
+                next_daily_dt = datetime.fromisoformat(next_daily.replace("Z", ""))
+                if next_daily_dt <= now:
+                    fund["next_daily_review"] = None
+                    _save_fund(fund)
+                    await loop.run_in_executor(_fund_executor, _run_daily_review)
+
+            # Catalyst event check + news check (run daily after market close)
+            fund = _load_fund()
+            market_close_today = now.replace(hour=20, minute=0, second=0, microsecond=0)
+            last_cat_check = fund.get("last_catalyst_check", "")
+            last_cat_date  = last_cat_check[:10] if last_cat_check else ""
+            if now >= market_close_today and last_cat_date != str(now.date()):
+                fund["last_catalyst_check"] = now.isoformat()
+                _save_fund(fund)
+                await loop.run_in_executor(_fund_executor, _run_catalyst_check)
+
+            # Daily news check on open positions (runs once per day at market close)
+            fund = _load_fund()
+            last_news_check = fund.get("last_news_check", "")
+            last_news_date  = last_news_check[:10] if last_news_check else ""
+            if now >= market_close_today and last_news_date != str(now.date()):
+                fund["last_news_check"] = now.isoformat()
+                _save_fund(fund)
+                await loop.run_in_executor(_fund_executor, _run_news_check)
+
+            # Weekly catalyst scan (autonomous discovery)
+            fund = _load_fund()
+            next_cat_scan = fund.get("next_catalyst_scan")
+            if next_cat_scan:
+                if datetime.fromisoformat(next_cat_scan.replace("Z", "")) <= now:
+                    fund["next_catalyst_scan"] = None
+                    _save_fund(fund)
+                    await loop.run_in_executor(_fund_executor, _run_catalyst_scan)
+            else:
+                # First run — kick off immediately
+                fund["next_catalyst_scan"] = None
+                _save_fund(fund)
+                await loop.run_in_executor(_fund_executor, _run_catalyst_scan)
+
+            # Bi-weekly AI analysis + trade decisions
+            fund = _load_fund()
+            next_biweekly = fund.get("next_biweekly_analysis")
+            if next_biweekly:
+                next_biweekly_dt = datetime.fromisoformat(next_biweekly.replace("Z", ""))
+                if next_biweekly_dt <= now:
+                    fund["next_biweekly_analysis"] = None
+                    _save_fund(fund)
+                    await loop.run_in_executor(_fund_executor, _run_biweekly_analysis)
+
+            # Weekly summary report
+            fund = _load_fund()
+            next_weekly = fund.get("next_weekly_report")
+            if next_weekly:
+                next_weekly_dt = datetime.fromisoformat(next_weekly.replace("Z", ""))
+                if next_weekly_dt <= now:
+                    fund["next_weekly_report"] = None
+                    _save_fund(fund)
+                    await loop.run_in_executor(_fund_executor, _run_weekly_report)
+
+        except Exception:
+            pass
+
+
+@app.on_event("startup")
+async def startup():
+    asyncio.create_task(_monitor_scheduler())
+    asyncio.create_task(_scout_scheduler())
+    asyncio.create_task(_fund_scheduler())
+    token = os.environ.get("DISCORD_BOT_TOKEN", "").strip()
+    if token:
+        t = threading.Thread(target=_run_discord_bot, daemon=True)
+        t.name = "discord-bot"
+        t.start()
+        print("[Discord] Bot thread started")
+
+
+# ── Scout endpoints ───────────────────────────────────────────────────────────
+
+@app.get("/scout")
+async def get_scout():
+    return _load_scout()
+
+
+@app.post("/scout/config")
+async def update_scout_config(data: ScoutConfig):
+    scout = _load_scout()
+    scout["config"] = data.model_dump()
+    if data.enabled and not scout.get("next_run"):
+        scout["next_run"] = datetime.utcnow().isoformat() + "Z"
+    _save_scout(scout)
+    return scout
+
+
+@app.post("/scout/run")
+async def trigger_scout_run():
+    scout = _load_scout()
+    if scout.get("is_running"):
+        return {"ok": False, "message": "Already running"}
+    scout["is_running"] = True
+    _save_scout(scout)
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(_monitor_executor, _run_scout_cycle)
+    return {"ok": True}
+
+
+@app.delete("/scout/recommendations/{rec_id}")
+async def delete_scout_recommendation(rec_id: str):
+    scout = _load_scout()
+    scout["recommendations"] = [r for r in scout.get("recommendations", []) if r.get("id") != rec_id]
+    _save_scout(scout)
+    return {"ok": True}
+
+
+# ── Monitor endpoints ─────────────────────────────────────────────────────────
+
+@app.get("/monitor")
+async def get_monitors():
+    return _load_monitors()
+
+
+@app.post("/monitor")
+async def create_monitor(data: MonitorCreate):
+    mon = _load_monitors()
+    entry = {
+        "id":             str(uuid.uuid4()),
+        "ticker":         data.ticker.upper().strip(),
+        "llm_provider":   data.llm_provider,
+        "deep_think_llm": data.deep_think_llm,
+        "quick_think_llm": data.quick_think_llm,
+        "interval_hours": data.interval_hours,
+        "last_checked_at": None,
+        "next_check_at":  datetime.utcnow().isoformat() + "Z",  # run immediately
+        "last_signal":    None,
+        "last_price":     None,
+        "is_running":     False,
+    }
+    mon["monitors"].append(entry)
+    _save_monitors(mon)
+    return entry
+
+
+@app.delete("/monitor/{monitor_id}")
+async def delete_monitor(monitor_id: str):
+    mon = _load_monitors()
+    mon["monitors"] = [m for m in mon["monitors"] if m["id"] != monitor_id]
+    _save_monitors(mon)
+    return {"ok": True}
+
+
+@app.post("/monitor/{monitor_id}/run")
+async def trigger_monitor_run(monitor_id: str):
+    """Immediately kick off an analysis run for a monitor."""
+    mon = _load_monitors()
+    found = next((m for m in mon["monitors"] if m["id"] == monitor_id), None)
+    if not found:
+        raise HTTPException(status_code=404, detail="Monitor not found")
+    if found.get("is_running"):
+        return {"ok": False, "message": "Already running"}
+    found["is_running"] = True
+    _save_monitors(mon)
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(_monitor_executor, _run_analysis_for_monitor, monitor_id)
+    return {"ok": True}
+
+
+@app.post("/monitor/alerts/read-all")
+async def mark_all_alerts_read():
+    mon = _load_monitors()
+    for a in mon.get("alerts", []):
+        a["read"] = True
+    _save_monitors(mon)
+    return {"ok": True}
+
+
+# ── Run lookup (tab-switch resilience) ───────────────────────────────────────
+
+@app.get("/run/{run_id}")
+async def get_run(run_id: str):
+    """Return a completed run by ID (used for tab-switch recovery)."""
+    runs = _load_portfolio()
+    run = next((r for r in runs if r.get("id") == run_id), None)
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found yet")
+    return run
+
+
+# ── Analyze endpoint (SSE) ────────────────────────────────────────────────────
+
+def _run_graph(request: AnalyzeRequest, queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
+    """Execute TradingAgentsGraph in a thread, pushing SSE events to the queue."""
+    try:
+        from tradingagents.graph.trading_graph import TradingAgentsGraph
+        from tradingagents.default_config import DEFAULT_CONFIG
+        from tradingagents.agents.utils.agent_states import AgentState, InvestDebateState, RiskDebateState
+        from tradingagents.dataflows.config import set_config
+
+        run_id = str(uuid.uuid4())
+
+        config = DEFAULT_CONFIG.copy()
+        config["llm_provider"] = request.llm_provider
+        config["deep_think_llm"] = request.deep_think_llm
+        config["quick_think_llm"] = request.quick_think_llm
+        config["max_debate_rounds"] = request.max_debate_rounds
+        config["max_risk_discuss_rounds"] = 1
+
+        def emit(event_type: str, data: dict):
+            asyncio.run_coroutine_threadsafe(
+                queue.put({"event": event_type, "data": data}), loop
+            )
+
+        emit("run_started", {"run_id": run_id})
+        emit("status", {"message": "Initializing agents…"})
+
+        ta = TradingAgentsGraph(debug=False, config=config)
+        set_config(config)
+
+        past_context = ta.memory_log.get_past_context(request.ticker)
+
+        init_state = {
+            "messages": [("human", request.ticker)],
+            "company_of_interest": request.ticker,
+            "trade_date": request.date,
+            "past_context": past_context,
+            "investment_debate_state": InvestDebateState(
+                bull_history="", bear_history="", history="",
+                current_response="", judge_decision="", count=0,
+            ),
+            "risk_debate_state": RiskDebateState(
+                aggressive_history="", conservative_history="", neutral_history="",
+                history="", latest_speaker="", current_aggressive_response="",
+                current_conservative_response="", current_neutral_response="",
+                judge_decision="", count=0,
+            ),
+            "market_report": "",
+            "fundamentals_report": "",
+            "sentiment_report": "",
+            "news_report": "",
+        }
+
+        graph_args = {
+            "stream_mode": "updates",
+            "config": {"recursion_limit": config.get("max_recur_limit", 100)},
+        }
+
+        emit("status", {"message": f"Running analysis for {request.ticker} on {request.date}…"})
+
+        final_state = None
+        seen_nodes: set = set()
+
+        for chunk in ta.graph.stream(init_state, **graph_args):
+            for node_name, state_delta in chunk.items():
+                if node_name.startswith("Msg Clear") or node_name.startswith("tools_"):
+                    continue
+
+                agent_id = NODE_TO_AGENT.get(node_name)
+                if not agent_id:
+                    continue
+
+                # Emit "agent_running" the first time we see this node
+                if node_name not in seen_nodes:
+                    emit("agent_running", {"agent": agent_id, "node": node_name})
+
+                seen_nodes.add(node_name)
+
+                # Extract report content
+                report = _extract_report(node_name, state_delta if isinstance(state_delta, dict) else {})
+
+                emit("agent_complete", {
+                    "agent": agent_id,
+                    "node": node_name,
+                    "snippet": _first_n_words(report),
+                    "report": report,
+                })
+
+                if node_name == "Portfolio Manager" and isinstance(state_delta, dict):
+                    final_state = state_delta
+
+        if final_state is None:
+            emit("error", {"message": "Graph completed but produced no final state."})
+            return
+
+        raw_decision = final_state.get("final_trade_decision", "")
+        signal = ta.process_signal(raw_decision)
+
+        # Fetch entry price for portfolio tracking
+        entry_price = _get_price(request.ticker, request.date)
+
+        run_record = {
+            "id": run_id,
+            "ticker": request.ticker,
+            "trade_date": request.date,
+            "signal": signal,
+            "reasoning": raw_decision,
+            "entry_price": entry_price,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "provider": request.llm_provider,
+            "deep_model": request.deep_think_llm,
+        }
+
+        # Persist to portfolio
+        runs = _load_portfolio()
+        runs.insert(0, run_record)
+        _save_portfolio(runs[:200])  # cap at 200 entries
+
+        emit("final_decision", {
+            "signal": signal,
+            "reasoning": raw_decision,
+            "ticker": request.ticker,
+            "date": request.date,
+            "entry_price": entry_price,
+            "run_id": run_id,
+        })
+
+        # Discord notification (fire-and-forget)
+        threading.Thread(
+            target=_discord_analysis_embed,
+            args=(request.ticker, signal, entry_price, raw_decision, request.llm_provider, request.date),
+            daemon=True,
+        ).start()
+
+        # Alpaca auto-trade (fire-and-forget)
+        threading.Thread(
+            target=_maybe_auto_trade,
+            args=(request.ticker, signal),
+            daemon=True,
+        ).start()
+
+    except Exception as exc:
+        import traceback
+        asyncio.run_coroutine_threadsafe(
+            queue.put({"event": "error", "data": {"message": str(exc), "detail": traceback.format_exc()}}),
+            loop,
+        )
+    finally:
+        asyncio.run_coroutine_threadsafe(queue.put(None), loop)
+
+
+@app.post("/analyze")
+async def analyze(request: AnalyzeRequest):
+    queue: asyncio.Queue = asyncio.Queue()
+    loop = asyncio.get_event_loop()
+    asyncio.get_event_loop().run_in_executor(None, _run_graph, request, queue, loop)
+
+    async def event_generator():
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            yield {"event": item["event"], "data": json.dumps(item["data"])}
+
+    return EventSourceResponse(event_generator())
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok", "timestamp": datetime.utcnow().isoformat() + "Z"}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  ALPACA BROKERAGE
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _maybe_auto_trade(ticker: str, signal: str):
+    """Called after every analysis. Submits a market order if auto-trade is on."""
+    try:
+        cfg = _load_alpaca_config()
+        if not cfg.get("auto_trade"):
+            return
+        if signal not in cfg.get("auto_trade_signals", ["BUY"]):
+            return
+
+        if signal == "BUY":
+            qty = alpaca_client.calculate_position_size(ticker, cfg.get("position_pct", 5.0) / 100)
+            if qty <= 0:
+                return
+            order = alpaca_client.submit_order(ticker, "buy", qty=qty)
+            _send_discord_webhook(
+                title=f"🤖 Auto-Trade Executed — {ticker}",
+                description=f"**BUY** {qty} shares of {ticker}",
+                signal="BUY",
+                fields=[
+                    {"name": "Order ID", "value": order.get("id", "?"), "inline": True},
+                    {"name": "Status",   "value": order.get("status", "?"), "inline": True},
+                ],
+                footer="ELLIE Auto-Trader • Paper Trading" if cfg.get("paper") else "ELLIE Auto-Trader • LIVE",
+            )
+        elif signal == "SELL":
+            pos = alpaca_client.get_position(ticker)
+            if pos:
+                order = alpaca_client.close_position(ticker)
+                _send_discord_webhook(
+                    title=f"🤖 Auto-Trade Executed — {ticker}",
+                    description=f"**SELL** entire position in {ticker}",
+                    signal="SELL",
+                    footer="ELLIE Auto-Trader",
+                )
+    except Exception as e:
+        print(f"[auto-trade] error for {ticker}: {e}")
+
+
+@app.get("/alpaca/account")
+async def alpaca_account():
+    return alpaca_client.get_account()
+
+
+@app.get("/alpaca/pnl")
+async def alpaca_pnl(period: str = "30d"):
+    """Return P&L for a given period: today | 7d | 30d | 1y | all"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, alpaca_client.get_pnl, period)
+
+
+@app.get("/alpaca/positions")
+async def alpaca_positions():
+    return alpaca_client.get_positions()
+
+
+@app.get("/alpaca/orders")
+async def alpaca_orders(limit: int = 20):
+    return alpaca_client.get_orders(limit=limit)
+
+
+@app.post("/alpaca/order")
+async def alpaca_order(req: AlpacaOrderRequest):
+    try:
+        result = alpaca_client.submit_order(
+            symbol=req.symbol,
+            side=req.side,
+            qty=req.qty,
+            notional=req.notional,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/alpaca/positions/{symbol}")
+async def alpaca_close_position(symbol: str):
+    try:
+        return alpaca_client.close_position(symbol)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/alpaca/config")
+async def get_alpaca_config():
+    return _load_alpaca_config()
+
+
+@app.post("/alpaca/config")
+async def save_alpaca_config(data: AlpacaTradeConfig):
+    cfg = _load_alpaca_config()
+    cfg.update({
+        "auto_trade":         data.auto_trade,
+        "auto_trade_signals": data.auto_trade_signals,
+        "position_pct":       data.position_pct,
+        "max_position_pct":   data.max_position_pct,
+    })
+    _save_alpaca_config(cfg)
+    return cfg
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  AUTONOMOUS FUND
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/fund")
+async def get_fund():
+    """Return current fund state."""
+    return _load_fund()
+
+
+@app.post("/fund/launch")
+async def launch_fund():
+    """Begin the autonomous fund — discover stocks, analyze, buy BUY signals."""
+    fund = _load_fund()
+    if fund.get("active"):
+        return {"ok": False, "message": "Fund is already active"}
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(_fund_executor, _run_fund_launch)
+    return {"ok": True}
+
+
+@app.post("/fund/pause")
+async def pause_fund():
+    """Pause the fund (stop scheduled reviews; disable auto_trade)."""
+    fund = _load_fund()
+    fund["active"] = False
+    _save_fund(fund)
+    alpaca_cfg = _load_alpaca_config()
+    alpaca_cfg["auto_trade"] = False
+    _save_alpaca_config(alpaca_cfg)
+    _fund_log("Fund paused by user")
+    return {"ok": True}
+
+
+@app.post("/fund/resume")
+async def resume_fund():
+    """Resume a paused fund (re-enable scheduled reviews and auto_trade)."""
+    fund = _load_fund()
+    fund["active"] = True
+    _save_fund(fund)
+    alpaca_cfg = _load_alpaca_config()
+    alpaca_cfg["auto_trade"] = True
+    _save_alpaca_config(alpaca_cfg)
+    _fund_log("Fund resumed by user")
+    return {"ok": True}
+
+
+@app.post("/fund/config")
+async def update_fund_config(data: FundConfig):
+    """Update fund configuration."""
+    fund = _load_fund()
+    fund["config"] = data.model_dump()
+    _save_fund(fund)
+    return fund
+
+
+@app.post("/fund/review")
+async def trigger_fund_review():
+    """Manually trigger an immediate daily review."""
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(_fund_executor, _run_daily_review)
+    return {"ok": True}
+
+
+def _run_manual_discover():
+    """Discover and buy N new stocks immediately. Runs in thread pool."""
+    import time as _time
+    try:
+        fund = _load_fund()
+        cfg  = fund["config"]
+        count = int(cfg.get("discovery_count", 1))
+        _fund_log(f"Manual discover started — looking for {count} new position(s)")
+
+        account   = alpaca_client.get_account()
+        positions = alpaca_client.get_positions()
+        held = [p.get("symbol", "") for p in positions]
+
+        picks = _discover_stocks_sync(
+            cfg.get("llm_provider", "google"),
+            cfg.get("quick_think_llm", "gemini-2.5-flash"),
+            cfg.get("scout_theme", ""),
+            count * 3,  # ask for extras so we have options after analysis
+            exclude=held,
+            investment_style=cfg.get("investment_style", "mixed"),
+        )
+
+        bought = 0
+        for i, pick in enumerate(picks):
+            if bought >= count:
+                break
+            ticker = pick.get("ticker", "").upper().strip()
+            if not ticker or ticker in held:
+                continue
+            if i > 0:
+                _fund_log(f"Cooling down 75s before analyzing {ticker}…")
+                _time.sleep(75)
+            try:
+                signal, raw_decision, price = _run_analysis_simple(ticker, cfg)
+                # Only notify Discord on actual purchase — not on hold/sell signals for stocks we don't own
+                if signal in ("Buy", "Overweight"):
+                    qty = alpaca_client.calculate_position_size(ticker, cfg.get("position_pct", 5.0) / 100)
+                    sector_tag = f" · {pick['sector']}" if pick.get('sector') else ''
+                    ok, order = _fund_buy_or_backlog(
+                        ticker, qty, price, signal, cfg,
+                        source="discover",
+                        reason=f"{pick.get('reason', '')}{sector_tag}",
+                        raw_decision=raw_decision,
+                    )
+                    if ok:
+                        _fund_log(f"Manual discover: bought {qty} shares of {ticker}")
+                        _log_portfolio_action(ticker, "BUY", qty, price, signal, reasoning=raw_decision)
+                        _send_discord_webhook(
+                            title=f"🔍 ELLIE Manual Discover — {ticker}",
+                            description=f"Purchased **{qty} shares** of {ticker} @ ${price or '?'}\n_{pick.get('reason', '')}{sector_tag}_",
+                            signal="Buy",
+                        )
+                        held.append(ticker)
+                        bought += 1
+                    elif qty > 0:
+                        # Backlisted — count as "found" so we don't keep searching past discovery_count
+                        held.append(ticker)
+                        bought += 1
+                    else:
+                        _fund_log(f"{ticker}: position size came out 0, skipping")
+                else:
+                    _fund_log(f"{ticker}: signal={signal}, skipping")
+            except Exception as exc:
+                _fund_log(f"Error analyzing {ticker}: {exc}")
+                continue
+
+        _fund_log(f"Manual discover complete — bought {bought}/{count} position(s)")
+        if bought == 0:
+            _send_discord_webhook(
+                title="🔍 ELLIE Manual Discover — No Buys",
+                description=f"Analyzed {len(picks)} candidates, none had a Buy signal. Try again or adjust filters.",
+            )
+    except Exception as exc:
+        _fund_log(f"Manual discover error: {exc}")
+        _send_discord_webhook(
+            title="🚨 Manual Discover Failed",
+            description=f"```{str(exc)[:800]}```",
+            signal="",
+        )
+
+
+@app.post("/fund/discover")
+async def trigger_manual_discover():
+    """Manually trigger stock discovery and buy N new positions."""
+    fund = _load_fund()
+    if not fund.get("active"):
+        raise HTTPException(status_code=400, detail="Fund is not active.")
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(_fund_executor, _run_manual_discover)
+    return {"ok": True}
+
+
+# ── Catalyst Watch endpoints ───────────────────────────────────────────────────
+
+@app.get("/fund/catalysts")
+async def get_catalysts():
+    """Return the catalyst watch list."""
+    return _load_catalysts()
+
+
+@app.post("/fund/catalysts/scan")
+async def trigger_catalyst_scan():
+    """Manually kick off the autonomous catalyst scan right now."""
+    fund = _load_fund()
+    if not fund.get("active"):
+        raise HTTPException(status_code=400, detail="Fund is not active.")
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(_fund_executor, _run_catalyst_scan)
+    return {"ok": True}
+
+
+@app.post("/fund/catalysts/{catalyst_id}/trigger")
+async def trigger_catalyst_now(catalyst_id: str):
+    """Manually run analysis on a specific catalyst right now."""
+    catalysts = _load_catalysts()
+    cat = next((c for c in catalysts if c["id"] == catalyst_id), None)
+    if not cat:
+        raise HTTPException(status_code=404, detail="Catalyst not found.")
+    cat["event_date"] = str(datetime.utcnow().date())  # force it to fire today
+    _save_catalysts(catalysts)
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(_fund_executor, _run_catalyst_check)
+    return {"ok": True}
+
+
+@app.delete("/fund/catalysts/{catalyst_id}")
+async def delete_catalyst(catalyst_id: str):
+    """Remove a catalyst from the watch list."""
+    catalysts = [c for c in _load_catalysts() if c["id"] != catalyst_id]
+    _save_catalysts(catalysts)
+    return {"ok": True}
+
+
+# ── Buy Backlog endpoints ──────────────────────────────────────────────────────
+
+@app.get("/fund/backlog")
+async def get_backlog():
+    """Return the buy backlog list."""
+    items = _load_backlog()
+    # Return all pending + recent bought/cancelled (last 20 non-pending)
+    pending   = [b for b in items if b["status"] == "pending"]
+    completed = [b for b in items if b["status"] != "pending"][-20:]
+    return {"items": pending + completed}
+
+
+@app.post("/fund/backlog/{item_id}/buy")
+async def buy_backlog_item(item_id: str):
+    """Manually execute a pending backlog buy."""
+    items = _load_backlog()
+    item  = next((b for b in items if b["id"] == item_id), None)
+    if not item:
+        raise HTTPException(status_code=404, detail="Backlog item not found")
+    if item["status"] != "pending":
+        return {"ok": False, "message": "Item is not pending"}
+
+    ticker = item["ticker"]
+    qty    = float(item["qty"])
+    price  = item.get("price")
+    loop   = asyncio.get_event_loop()
+
+    def _do_buy():
+        try:
+            order = alpaca_client.submit_order(ticker, "buy", qty=qty)
+            item["status"]    = "bought"
+            item["bought_at"] = datetime.utcnow().isoformat()
+            item["order_id"]  = order.get("id", "")
+            _save_backlog(items)
+            _fund_log(f"Backlog manual buy: {qty} shares of {ticker}")
+            _log_portfolio_action(ticker, "BUY", qty, price, item.get("signal", "Buy"),
+                                  reasoning=item.get("reason", ""), order_id=order.get("id", ""))
+            _send_discord_webhook(
+                title=f"📋 ELLIE Backlog Buy — {ticker}",
+                description=f"Manually purchased **{int(qty)} shares** of {ticker} from buy queue",
+                signal="Buy",
+            )
+            return {"ok": True, "order_id": order.get("id", "")}
+        except Exception as exc:
+            return {"ok": False, "message": str(exc)}
+
+    return await loop.run_in_executor(None, _do_buy)
+
+
+@app.delete("/fund/backlog/{item_id}")
+async def delete_backlog_item(item_id: str):
+    """Remove an item from the buy backlog."""
+    items = [b for b in _load_backlog() if b["id"] != item_id]
+    _save_backlog(items)
+    return {"ok": True}
+
+
+@app.post("/fund/backlog/clear")
+async def clear_backlog():
+    """Remove all pending backlog items."""
+    items = _load_backlog()
+    items = [b for b in items if b["status"] != "pending"]
+    _save_backlog(items)
+    return {"ok": True}
+
+
+@app.post("/fund/reset")
+async def reset_fund():
+    """Reset fund state so it can be relaunched from the UI."""
+    fund = _load_fund()
+    preserved_cfg = fund.get("config", {})
+    FUND_FILE.parent.mkdir(parents=True, exist_ok=True)
+    reset_state = {
+        "active": False,
+        "launched_at": None,
+        "last_daily_review": None,
+        "next_daily_review": None,
+        "last_biweekly_analysis": None,
+        "next_biweekly_analysis": None,
+        "last_weekly_report": None,
+        "next_weekly_report": None,
+        "config": preserved_cfg,
+        "log": [],
+    }
+    FUND_FILE.write_text(json.dumps(reset_state, indent=2))
+    return {"ok": True, "message": "Fund reset. You can now relaunch."}
+
+
+@app.get("/fund/log")
+async def get_fund_log():
+    """Return the fund activity log."""
+    fund = _load_fund()
+    return fund.get("log", [])
+
+
+@app.get("/logs")
+async def get_logs(n: int = 500):
+    """Return the last N app log entries from the rotating log file."""
+    if not APP_LOG_FILE.exists():
+        return []
+    try:
+        lines = APP_LOG_FILE.read_text(encoding="utf-8").splitlines()
+        # Keep last N lines, newest first
+        tail = lines[-n:] if len(lines) > n else lines
+        entries = []
+        for line in reversed(tail):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entries.append(json.loads(line))
+            except Exception:
+                entries.append({"ts": "", "level": "INFO", "src": "app", "msg": line})
+        return entries
+    except Exception as exc:
+        return [{"ts": datetime.utcnow().isoformat() + "Z", "level": "ERROR", "src": "api", "msg": f"Could not read log file: {exc}"}]
+
+
+@app.get("/preview/weekly-report")
+async def preview_weekly_report():
+    """Return the Discord embed that _would_ be sent for the weekly report — no HTTP send."""
+    account   = alpaca_client.get_account()
+    positions = alpaca_client.get_positions()
+
+    portfolio_value = account.get("portfolio_value") or account.get("equity") or 0
+    cash            = account.get("cash") or 0
+    daily_pnl = None
+    if account.get("equity") and account.get("last_equity"):
+        daily_pnl = float(account["equity"]) - float(account["last_equity"])
+
+    lines = [
+        f"**Portfolio Value:** ${float(portfolio_value):,.2f}",
+        f"**Cash:** ${float(cash):,.2f}",
+        f"**Today P&L:** ${daily_pnl:+,.2f}" if daily_pnl is not None else "**Today P&L:** —",
+        "",
+        f"**Open Positions ({len(positions)}):**",
+    ]
+    for pos in positions:
+        sym    = pos.get("symbol", "?")
+        unrl   = float(pos.get("unrealized_pl") or 0)
+        unrl_p = float(pos.get("unrealized_plpc") or 0)
+        lines.append(
+            f"  • {sym}: ${float(pos.get('market_value') or 0):,.2f} "
+            f"(P&L: ${unrl:+,.2f} / {unrl_p*100:+.1f}%)"
+        )
+
+    description = "\n".join(lines)
+    embed = {
+        "title":       "📊 ELLIE Weekly Report",
+        "description": description[:1900],
+        "color":       5793266,
+        "footer":      {"text": f"Preview · Generated {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC"},
+    }
+    return {"embed": embed, "payload": {"embeds": [embed]}}
+
+
+@app.get("/preview/daily-review")
+async def preview_daily_review():
+    """Return a sample daily review embed using current positions — no HTTP send."""
+    positions = alpaca_client.get_positions()
+    sample_decisions = []
+    for pos in positions:
+        sym = pos.get("symbol", "?")
+        sample_decisions.append(f"HOLD {sym} — awaiting next analysis signal")
+
+    summary = "\n".join(sample_decisions) if sample_decisions else "No open positions."
+    embed = {
+        "title":       "📋 ELLIE Daily Review Complete",
+        "description": summary,
+        "color":       5793266,
+        "footer":      {"text": f"Preview · {len(positions)} position(s) · {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC"},
+    }
+    return {"embed": embed, "payload": {"embeds": [embed]}}
+
+
+@app.get("/preview/signals")
+async def preview_signals():
+    """Return example Discord embeds for every signal type."""
+    examples = [
+        {
+            "signal": "Buy",
+            "ticker": "NVDA",
+            "price":  "$875.50",
+            "insight": "Strong AI chip demand with robust data center tailwinds driving revenue growth.",
+        },
+        {
+            "signal": "Sell",
+            "ticker": "TSLA",
+            "price":  "$180.00",
+            "insight": "Margin compression and increasing EV competition outweigh near-term catalysts.",
+        },
+        {
+            "signal": "Hold",
+            "ticker": "AAPL",
+            "price":  "$195.00",
+            "insight": "Stable cash flows but limited near-term upside; watchlist for breakout above $210.",
+        },
+    ]
+    result = []
+    for ex in examples:
+        signal = ex["signal"]
+        emoji  = SIGNAL_EMOJI.get(signal, "⬜")
+        plain  = SIGNAL_PLAIN.get(signal, signal)
+        color  = SIGNAL_COLOR.get(signal, 5793266)
+        embed  = {
+            "title":       f"{emoji} {ex['ticker']} — {plain}",
+            "description": f"**Analysis complete** for {ex['ticker']} on {datetime.utcnow().strftime('%Y-%m-%d')}",
+            "color":       color,
+            "fields": [
+                {"name": "Signal",      "value": plain,         "inline": True},
+                {"name": "Entry Price", "value": ex["price"],   "inline": True},
+                {"name": "Provider",    "value": "google",      "inline": True},
+                {"name": "Key Insight", "value": ex["insight"], "inline": False},
+            ],
+            "footer": {"text": f"TradingAgents · {datetime.utcnow().strftime('%Y-%m-%d')}"},
+        }
+        result.append({"signal": signal, "ticker": ex["ticker"], "embed": embed})
+    return result
+
+
+@app.get("/portfolio/history")
+async def get_portfolio_history():
+    """Return the fund trade history with reasoning."""
+    if not PORTFOLIO_HISTORY_FILE.exists():
+        return []
+    try:
+        return json.loads(PORTFOLIO_HISTORY_FILE.read_text())
+    except Exception:
+        return []
