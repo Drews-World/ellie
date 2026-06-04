@@ -8,6 +8,7 @@ import PersonalPage from './pages/PersonalPage'
 import TradingFloor from './pages/TradingFloor'
 import BusinessFactory from './pages/BusinessFactory'
 import OGDashboard from './pages/OGDashboard'
+import PrivacyPolicy from './pages/PrivacyPolicy'
 import Layout from './components/shared/Layout'
 
 export default function App() {
@@ -15,6 +16,8 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        {/* Public — must be reachable without auth (Pinterest app review). */}
+        <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route
           path="/"
           element={
