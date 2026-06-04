@@ -108,20 +108,35 @@ HERMES_TOOLSETS = os.environ.get("HERMES_TOOLSETS", "ellie-floors")
 HERMES_TIMEOUT = float(os.environ.get("HERMES_TIMEOUT", "180"))
 
 
-def _build_hermes_prompt(system: str, messages: list) -> str:
-    """Flatten persona + conversation into a single one-shot prompt for Hermes."""
-    lines = [system, "", "--- Conversation so far ---"]
+# Lean persona for Hermes. Hermes already has its own agent loop + system prompt;
+# over-steering it (e.g. "you MUST call the tool") makes it fake-template answers
+# with [placeholder] brackets instead of either chatting or actually calling tools.
+# Keep it minimal and let its native tool-use decide.
+HERMES_PERSONA = (
+    "You are ELLIE — Drew's executive AI and the brain of his multi-venture "
+    "operation. Crisp, confident, analytical, a little wry. Never pad. Keep "
+    "replies under 400 words and sign off '— ELLIE'.\n"
+    "You have live ellie-floors tools for Drew's Etsy POD business (designs, "
+    "pipeline, realized sales, spend), the autonomous trading fund (account, "
+    "positions, P&L), and his business registry. Rules:\n"
+    "- For greetings or chit-chat, just reply naturally — do NOT dump a business briefing.\n"
+    "- When he asks for any business/sales/design/pipeline/spend/trading figure, "
+    "call the relevant tool and answer with the real result.\n"
+    "- NEVER write placeholder brackets like [balance] or [sales]. If you'd need a "
+    "number, call the tool to get it. Never invent figures."
+)
+
+
+def _build_hermes_prompt(messages: list, context: dict | None = None) -> str:
+    """Lean persona + context + conversation → one-shot prompt for Hermes."""
+    lines = [HERMES_PERSONA]
+    if context:
+        lines.append(f"\nContext about Drew: {context}")
+    lines.append("\n--- Conversation so far ---")
     for m in messages:
         role = str(m.get("role", "user")).upper()
         lines.append(f"{role}: {m.get('content', '')}")
-    lines.append(
-        "\nYou are ELLIE answering the latest USER message. CRITICAL: for any "
-        "business, sales, design, pipeline, spend, or trading numbers you MUST "
-        "actually CALL your ellie-floors tools and wait for their results before "
-        "replying. Do NOT output 'let me check' or narrate your plan — silently "
-        "run the tools, then return ONLY your final answer with the real figures. "
-        "Never guess numbers. Sign off with '— ELLIE'."
-    )
+    lines.append("\nReply as ELLIE to the latest USER message.")
     return "\n".join(lines)
 
 
@@ -129,21 +144,32 @@ import re as _re
 
 HERMES_RETRIES = int(os.environ.get("HERMES_RETRIES", "3"))
 
-# A "stub" is the model narrating intent ("I'll call the tool…") and stopping
-# instead of actually completing the tool call — a known intermittent failure.
-# Short + matches an intent-to-act pattern ⇒ retry rather than serve it.
+# A "stub" is a non-answer we should retry instead of serving: the model
+# narrating intent ("I'll call the tool…") and stopping, a fake [placeholder]
+# template instead of real tool data, or essentially-empty (just the signoff).
 _STUB_RE = _re.compile(
     r"\b(i['’]?ll|i will|let me|i need to|i['’]?m going to|allow me to)\b"
     r".{0,50}?\b(call|check|retrieve|query|use|pull|look up|fetch|get|access)\b",
     _re.IGNORECASE,
 )
+# Bracketed placeholders the model writes when it templates instead of calling tools.
+_PLACEHOLDER_RE = _re.compile(r"\[[A-Za-z][^\]]{2,40}\]")
+_SIGNOFF_RE = _re.compile(r"[—\-–]\s*ELLIE\s*$")
 
 
 def _looks_like_stub(text: str) -> bool:
     t = (text or "").strip()
-    if len(t) > 400:
-        return False  # a substantial answer is not a stub
-    return bool(_STUB_RE.search(t))
+    # Essentially-empty: nothing left once the signoff is stripped.
+    body = _SIGNOFF_RE.sub("", t).strip()
+    if len(body) < 12:
+        return True
+    # Fake template: bracketed placeholders instead of real tool data.
+    if _PLACEHOLDER_RE.search(t):
+        return True
+    # Short narration-of-intent that never delivered.
+    if len(t) <= 400 and _STUB_RE.search(t):
+        return True
+    return False
 
 
 def _run_hermes_blocking(prompt: str) -> str | None:
@@ -191,7 +217,7 @@ async def ellie_chat(messages: list, context: dict = {}) -> str:
 
     # Primary brain: Hermes (hosted agent with floor tools via MCP) — opt-in.
     if HERMES_ENABLED:
-        answer = await _hermes_oneshot(_build_hermes_prompt(system, messages))
+        answer = await _hermes_oneshot(_build_hermes_prompt(messages, context))
         if answer:
             return answer
         logger.info("ellie_chat: Hermes unavailable, using in-process tool brain")
