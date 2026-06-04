@@ -5,7 +5,7 @@ import LobbyPage from './pages/LobbyPage'
 import DashboardPage from './pages/DashboardPage'
 import WorldPage from './pages/WorldPage'
 import PersonalPage from './pages/PersonalPage'
-import TradingFloor from './pages/TradingFloor'
+import TradingDashboard from './trading/TradingDashboard'
 import BusinessFactory from './pages/BusinessFactory'
 import OGDashboard from './pages/OGDashboard'
 import PrivacyPolicy from './pages/PrivacyPolicy'
@@ -31,7 +31,7 @@ export default function App() {
           }
         >
           <Route index element={<LobbyPage />} />
-          <Route path="trading"  element={<TradingFloor />} />
+          <Route path="trading"  element={<TradingDashboard />} />
           <Route path="business" element={<BusinessFactory />} />
           <Route path="og" element={<OGDashboard />}>
             <Route index element={<Navigate to="world" replace />} />
