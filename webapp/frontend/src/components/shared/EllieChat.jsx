@@ -9,6 +9,39 @@ const raj  = "var(--font-ui)"
 
 const CHAT_BAR_H = 58
 
+// Active "thinking" indicator. Hermes does ~40s of buffered agent work and only
+// emits the final text at the end, so true token streaming isn't possible — but
+// we keep the wait alive with rotating status + an elapsed timer instead of a
+// frozen "PROCESSING".
+function ThinkingIndicator() {
+  const PHASES = [
+    'CONSULTING THE FLOORS',
+    'QUERYING THE TRADING DESK',
+    'READING THE SALES LEDGER',
+    'CHECKING THE BUSINESS CREW',
+    'SYNTHESIZING',
+  ]
+  const [phase, setPhase] = useState(0)
+  const [secs, setSecs] = useState(0)
+  useEffect(() => {
+    const t0 = Date.now()
+    const tick = setInterval(() => setSecs(Math.floor((Date.now() - t0) / 1000)), 1000)
+    const rot = setInterval(() => setPhase(p => (p + 1) % PHASES.length), 2600)
+    return () => { clearInterval(tick); clearInterval(rot) }
+  }, [])
+  return (
+    <div style={{
+      fontFamily: mono, fontSize: 11, color: 'var(--ink-500)',
+      letterSpacing: 1, display: 'flex', alignItems: 'center', gap: 8,
+    }}>
+      <span style={{ color: 'var(--violet-500)', fontWeight: 700 }}>ELLIE</span>
+      <span>{PHASES[phase]}</span>
+      <span style={{ animation: 'cursor-blink 0.7s step-end infinite', color: 'var(--violet-500)' }}>_</span>
+      <span style={{ marginLeft: 'auto', opacity: 0.5 }}>{secs}s</span>
+    </div>
+  )
+}
+
 // ── Widget pulse keyword map ─────────────────────────────────────────────────
 const PULSE_MAP = [
   { words: ['market','stock','spy','nasdaq','aapl','nvda','tsla','amzn','equity','dow','s&p','shares','index'], widget: 'stocks' },
@@ -402,13 +435,7 @@ export default function EllieChat() {
           {/* Current response with typewriter */}
           <div style={{ overflowY: 'auto', padding: '14px 16px', flex: 1 }}>
             {chatLoading ? (
-              <div style={{
-                fontFamily: mono, fontSize: 11, color: 'var(--ink-500)',
-                letterSpacing: 1, display: 'flex', alignItems: 'center', gap: 8,
-              }}>
-                <span>PROCESSING</span>
-                <span style={{ animation: 'cursor-blink 0.7s step-end infinite', color: 'var(--violet-500)' }}>_</span>
-              </div>
+              <ThinkingIndicator />
             ) : (
               <div style={{ fontFamily: raj, fontSize: 14, lineHeight: 1.75, color: 'var(--ink-700)' }}>
                 <span dangerouslySetInnerHTML={{ __html: formatEllie(displayed) }} />
