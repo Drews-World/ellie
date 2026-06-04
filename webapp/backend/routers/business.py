@@ -355,7 +355,15 @@ async def promote_run(limit: int = 10):
 @router.get("/sales/performance")
 async def sales_performance():
     try:
-        return await _get("/sales/performance")
+        data = await _get("/sales/performance")
+        # The stored niche can be a full design-brief paragraph; trim to a short
+        # label so it doesn't bloat the agent's context (which causes the model
+        # to return empty completions).
+        for n in (data.get("niches") or []):
+            niche = n.get("niche")
+            if isinstance(niche, str) and len(niche) > 70:
+                n["niche"] = niche[:70].rsplit(" ", 1)[0].rstrip(",.;:") + "…"
+        return data
     except Exception as e:
         return {"niches": [], "total_units": 0, "total_revenue_usd": 0.0, "error": str(e)}
 

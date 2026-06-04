@@ -155,6 +155,14 @@ _STUB_RE = _re.compile(
 # Bracketed placeholders the model writes when it templates instead of calling tools.
 _PLACEHOLDER_RE = _re.compile(r"\[[A-Za-z][^\]]{2,40}\]")
 _SIGNOFF_RE = _re.compile(r"[—\-–]\s*ELLIE\s*$")
+# Hermes's own failure sentinels (printed as the "answer" with rc=0) — e.g.
+# "⚠️ No reply: the model returned empty content after retries…". Treat as a
+# failed run so we retry, then fall back to the in-process brain.
+_HERMES_FAIL_RE = _re.compile(
+    r"no reply|returned empty content|after retries|switch model/provider|"
+    r"try `?continue`?|no final response",
+    _re.IGNORECASE,
+)
 
 
 def _looks_like_stub(text: str) -> bool:
@@ -162,6 +170,9 @@ def _looks_like_stub(text: str) -> bool:
     # Essentially-empty: nothing left once the signoff is stripped.
     body = _SIGNOFF_RE.sub("", t).strip()
     if len(body) < 12:
+        return True
+    # Hermes's own "empty content / no reply" failure message.
+    if _HERMES_FAIL_RE.search(t):
         return True
     # Fake template: bracketed placeholders instead of real tool data.
     if _PLACEHOLDER_RE.search(t):
@@ -248,6 +259,38 @@ async def ellie_chat(messages: list, context: dict = {}) -> str:
             raise
 
 
+# Honest message when the model keeps returning empty (vs. a blank "— ELLIE").
+_EMPTY_REPLY = "I hit a snag generating that one — mind asking again? — ELLIE"
+
+
+def _create_msg(client, model, convo, with_tools: bool):
+    """One completion, retrying when the model returns an unusable message —
+    no tool calls AND content that's empty or just a stub (e.g. only the
+    '— ELLIE' signoff). OpenRouter/Llama intermittently produce these."""
+    msg = None
+    for _ in range(4):
+        kw = {"model": model, "messages": convo, "max_tokens": 1000}
+        if with_tools:
+            kw["tools"] = TOOLS
+            kw["tool_choice"] = "auto"
+        msg = client.chat.completions.create(**kw).choices[0].message
+        if getattr(msg, "tool_calls", None):
+            return msg
+        content = (msg.content or "").strip()
+        if content and not _looks_like_stub(content):
+            return msg
+        logger.info("empty/stub completion, retrying")
+    return msg
+
+
+def _final_text(msg) -> str:
+    """Extract a real answer from a message, or the honest snag message."""
+    content = (getattr(msg, "content", None) or "").strip()
+    if not content or _looks_like_stub(content):
+        return _EMPTY_REPLY
+    return content
+
+
 async def _chat_with_tools(convo: list) -> str:
     """Run the model with function-calling, executing tools until it answers.
 
@@ -258,18 +301,11 @@ async def _chat_with_tools(convo: list) -> str:
     client, model = get_model_client("fast")
 
     for _ in range(_MAX_TOOL_ROUNDS):
-        resp = client.chat.completions.create(
-            model=model,
-            messages=convo,
-            tools=TOOLS,
-            tool_choice="auto",
-            max_tokens=1000,
-        )
-        msg = resp.choices[0].message
+        msg = _create_msg(client, model, convo, with_tools=True)
         tool_calls = getattr(msg, "tool_calls", None)
 
         if not tool_calls:
-            return msg.content or "— ELLIE"
+            return _final_text(msg)
 
         # Record the assistant turn (with its tool calls) before answering them.
         convo.append({
@@ -300,7 +336,5 @@ async def _chat_with_tools(convo: list) -> str:
             })
 
     # Hit the round cap — ask for a final answer with whatever it has gathered.
-    final = client.chat.completions.create(
-        model=model, messages=convo, max_tokens=1000,
-    )
-    return final.choices[0].message.content or "— ELLIE"
+    final = _create_msg(client, model, convo, with_tools=False)
+    return _final_text(final)
