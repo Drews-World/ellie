@@ -119,7 +119,7 @@ export default function LiveFeedWidget() {
   return (
     <div style={{
       background: '#060f1a',
-      border: '1px solid rgba(0,212,255,0.2)',
+      border: '1px solid rgba(95,208,216,0.2)',
       borderRadius: 4,
       overflow: 'hidden',
       width: '100%',
@@ -128,11 +128,11 @@ export default function LiveFeedWidget() {
       {/* ── Header ── */}
       <div style={{
         padding: '7px 12px 0',
-        borderBottom: '1px solid rgba(0,212,255,0.1)',
-        background: 'rgba(0,212,255,0.02)',
+        borderBottom: '1px solid rgba(95,208,216,0.1)',
+        background: 'rgba(95,208,216,0.02)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-          <span style={{ fontFamily: orb, fontSize: 9, letterSpacing: 3, color: '#00d4ff', fontWeight: 700 }}>
+          <span style={{ fontFamily: orb, fontSize: 9, letterSpacing: 3, color: '#5FD0D8', fontWeight: 700 }}>
             LIVE FEEDS
           </span>
           {/* Live indicator */}
@@ -153,10 +153,10 @@ export default function LiveFeedWidget() {
               key={tab}
               onClick={() => switchTab(tab)}
               style={{
-                background: activeTab === tab ? 'rgba(0,212,255,0.1)' : 'none',
+                background: activeTab === tab ? 'rgba(95,208,216,0.1)' : 'none',
                 border: 'none',
-                borderBottom: `2px solid ${activeTab === tab ? '#00d4ff' : 'transparent'}`,
-                color: activeTab === tab ? '#00d4ff' : 'rgba(180,220,255,0.35)',
+                borderBottom: `2px solid ${activeTab === tab ? '#5FD0D8' : 'transparent'}`,
+                color: activeTab === tab ? '#5FD0D8' : 'rgba(180,220,255,0.35)',
                 fontFamily: mono, fontSize: 7, letterSpacing: 1,
                 padding: '4px 10px', cursor: 'pointer',
                 transition: 'all 0.12s',
@@ -169,7 +169,7 @@ export default function LiveFeedWidget() {
       {/* ── Source sub-selector ── */}
       <div style={{
         display: 'flex', gap: 5, padding: '6px 12px',
-        borderBottom: '1px solid rgba(0,212,255,0.08)',
+        borderBottom: '1px solid rgba(95,208,216,0.08)',
         flexWrap: 'wrap',
       }}>
         {FEEDS[activeTab].map(feed => (
@@ -177,10 +177,10 @@ export default function LiveFeedWidget() {
             key={feed.id}
             onClick={() => switchFeed(feed)}
             style={{
-              background: activeFeed.id === feed.id ? 'rgba(0,212,255,0.12)' : 'rgba(0,212,255,0.03)',
-              border: `1px solid ${activeFeed.id === feed.id ? 'rgba(0,212,255,0.5)' : 'rgba(0,212,255,0.12)'}`,
+              background: activeFeed.id === feed.id ? 'rgba(95,208,216,0.12)' : 'rgba(95,208,216,0.03)',
+              border: `1px solid ${activeFeed.id === feed.id ? 'rgba(95,208,216,0.5)' : 'rgba(95,208,216,0.12)'}`,
               borderRadius: 2,
-              color: activeFeed.id === feed.id ? '#00d4ff' : 'rgba(180,220,255,0.45)',
+              color: activeFeed.id === feed.id ? '#5FD0D8' : 'rgba(180,220,255,0.45)',
               fontFamily: mono, fontSize: 7, letterSpacing: 1,
               padding: '2px 8px', cursor: 'pointer', transition: 'all 0.12s',
             }}
@@ -223,7 +223,7 @@ export default function LiveFeedWidget() {
       {/* ── Feed description ── */}
       <div style={{
         padding: '4px 12px',
-        borderTop: '1px solid rgba(0,212,255,0.06)',
+        borderTop: '1px solid rgba(95,208,216,0.06)',
         fontFamily: mono, fontSize: 7,
         color: 'rgba(180,220,255,0.25)',
         letterSpacing: 1,

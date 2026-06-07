@@ -38,10 +38,10 @@ export default function NewsWidget() {
           >
             <div style={{
               padding: '7px 0',
-              borderBottom: '1px solid rgba(0,212,255,0.06)',
+              borderBottom: '1px solid rgba(95,208,216,0.06)',
               transition: 'background 0.15s',
             }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,212,255,0.05)'}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(95,208,216,0.05)'}
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
             >
               <div style={{ fontFamily: raj, fontSize: 11, color: '#cceeff', lineHeight: 1.4, marginBottom: 3 }}>
@@ -52,7 +52,7 @@ export default function NewsWidget() {
                 {article.publishedAt && (
                   <span>{new Date(article.publishedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                 )}
-                <span style={{ color: 'rgba(0,212,255,0.4)', marginLeft: 'auto' }}>↗</span>
+                <span style={{ color: 'rgba(95,208,216,0.4)', marginLeft: 'auto' }}>↗</span>
               </div>
             </div>
           </a>

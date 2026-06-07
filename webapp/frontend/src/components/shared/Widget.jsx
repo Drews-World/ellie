@@ -6,7 +6,7 @@ export default function Widget({ title, badge, badgeType = 'default', widgetKey,
   const isPulsing = widgetKey && !!pulsingWidgets[widgetKey]
 
   const badgeColors = {
-    default: { bg: 'rgba(0,212,255,0.15)', color: '#00d4ff', border: 'rgba(0,212,255,0.3)' },
+    default: { bg: 'rgba(95,208,216,0.15)', color: '#5FD0D8', border: 'rgba(95,208,216,0.3)' },
     red:     { bg: 'rgba(255,59,59,0.15)', color: '#ff3b3b', border: 'rgba(255,59,59,0.3)' },
     amber:   { bg: 'rgba(255,179,0,0.15)', color: '#ffb300', border: 'rgba(255,179,0,0.3)' },
     green:   { bg: 'rgba(0,255,157,0.15)', color: '#00ff9d', border: 'rgba(0,255,157,0.3)' },
@@ -16,9 +16,12 @@ export default function Widget({ title, badge, badgeType = 'default', widgetKey,
 
   return (
     <div
-      className={`widget${isPulsing ? ' widget-pulse' : ''}`}
+      className={`widget${widgetKey ? ' widget-interactive' : ''}${isPulsing ? ' widget-pulse' : ''}`}
       data-widget-id={widgetKey || 'widget'}
       onClick={() => { if (widgetKey) { soundEngine.confirm(); openDetail(widgetKey, detailTitle || title) } }}
+      onKeyDown={e => { if (widgetKey && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); soundEngine.confirm(); openDetail(widgetKey, detailTitle || title) } }}
+      role={widgetKey ? 'button' : undefined}
+      tabIndex={widgetKey ? 0 : undefined}
       style={{ cursor: widgetKey ? 'pointer' : 'default' }}
     >
       <div className="widget-header">

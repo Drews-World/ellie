@@ -42,8 +42,8 @@ export default function GoalsWidget() {
           onClick={(e) => { e.stopPropagation(); setShowAdd(!showAdd) }}
           style={{
             fontFamily: orb, fontSize: 8, letterSpacing: 1,
-            background: 'rgba(0,212,255,0.1)', border: '1px solid rgba(0,212,255,0.3)',
-            color: '#00d4ff', padding: '3px 8px', borderRadius: 2, cursor: 'pointer',
+            background: 'rgba(95,208,216,0.1)', border: '1px solid rgba(95,208,216,0.3)',
+            color: '#5FD0D8', padding: '3px 8px', borderRadius: 2, cursor: 'pointer',
           }}
         >+ ADD</button>
       </div>
@@ -55,7 +55,7 @@ export default function GoalsWidget() {
             value={newGoal.title}
             onChange={e => setNewGoal({ ...newGoal, title: e.target.value })}
             style={{
-              background: 'rgba(0,212,255,0.05)', border: '1px solid rgba(0,212,255,0.2)',
+              background: 'rgba(95,208,216,0.05)', border: '1px solid rgba(95,208,216,0.2)',
               color: '#cceeff', padding: '6px 8px', borderRadius: 2,
               fontFamily: "'Rajdhani', sans-serif", fontSize: 12, width: '100%',
             }}
@@ -65,7 +65,7 @@ export default function GoalsWidget() {
             value={newGoal.target_date}
             onChange={e => setNewGoal({ ...newGoal, target_date: e.target.value })}
             style={{
-              background: 'rgba(0,212,255,0.05)', border: '1px solid rgba(0,212,255,0.2)',
+              background: 'rgba(95,208,216,0.05)', border: '1px solid rgba(95,208,216,0.2)',
               color: '#cceeff', padding: '6px 8px', borderRadius: 2,
               fontFamily: mono, fontSize: 11, width: '100%',
             }}
@@ -73,8 +73,8 @@ export default function GoalsWidget() {
           <button
             onClick={handleAdd}
             style={{
-              background: 'rgba(0,212,255,0.15)', border: '1px solid rgba(0,212,255,0.4)',
-              color: '#00d4ff', fontFamily: orb, fontSize: 8, letterSpacing: 2,
+              background: 'rgba(95,208,216,0.15)', border: '1px solid rgba(95,208,216,0.4)',
+              color: '#5FD0D8', fontFamily: orb, fontSize: 8, letterSpacing: 2,
               padding: '6px', borderRadius: 2, cursor: 'pointer',
             }}
           >CONFIRM</button>
@@ -90,13 +90,13 @@ export default function GoalsWidget() {
       {active.map(g => (
         <div key={g.id} style={{
           display: 'flex', alignItems: 'flex-start', gap: 8,
-          padding: '7px 0', borderBottom: '1px solid rgba(0,212,255,0.06)',
+          padding: '7px 0', borderBottom: '1px solid rgba(95,208,216,0.06)',
         }}>
           <div
             onClick={(e) => { e.stopPropagation(); handleComplete(g) }}
             style={{
               width: 14, height: 14, borderRadius: 2, marginTop: 2,
-              border: '1px solid rgba(0,212,255,0.4)',
+              border: '1px solid rgba(95,208,216,0.4)',
               cursor: 'pointer', flexShrink: 0,
               background: 'transparent',
             }}
@@ -109,7 +109,7 @@ export default function GoalsWidget() {
               </div>
             )}
             {g.milestones?.length > 0 && (
-              <div style={{ fontFamily: mono, fontSize: 9, color: 'rgba(0,212,255,0.5)', marginTop: 2 }}>
+              <div style={{ fontFamily: mono, fontSize: 9, color: 'rgba(95,208,216,0.5)', marginTop: 2 }}>
                 {g.milestones.filter(m => m.done).length}/{g.milestones.length} MILESTONES
               </div>
             )}

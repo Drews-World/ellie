@@ -28,7 +28,7 @@ export default function DetailPanel() {
   if (!detailOpen) return null
 
   const formatContent = (text) => text
-    .replace(/\*\*(.*?)\*\*/g, '<strong style="color:#00d4ff">$1</strong>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong style="color:#5FD0D8">$1</strong>')
     .replace(/\n\n/g, '</p><p style="margin-bottom:12px">')
     .replace(/\n/g, '<br>')
 
@@ -48,11 +48,11 @@ export default function DetailPanel() {
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '14px 0',
-          borderBottom: '1px solid rgba(0,212,255,0.25)',
+          borderBottom: '1px solid rgba(95,208,216,0.25)',
           marginBottom: 20,
         }}>
           <div>
-            <div style={{ fontFamily: "'Orbitron', sans-serif", fontSize: 14, letterSpacing: 4, color: '#00d4ff' }}>
+            <div style={{ fontFamily: "'Orbitron', sans-serif", fontSize: 14, letterSpacing: 4, color: '#5FD0D8' }}>
               {detailTitle}
             </div>
             <div style={{ fontFamily: "'Share Tech Mono', monospace", fontSize: 9, color: 'rgba(180,220,255,0.4)', letterSpacing: 2, marginTop: 3 }}>
@@ -65,14 +65,14 @@ export default function DetailPanel() {
               fontFamily: "'Orbitron', sans-serif",
               fontSize: 10, letterSpacing: 2,
               background: 'none',
-              border: '1px solid rgba(0,212,255,0.25)',
+              border: '1px solid rgba(95,208,216,0.25)',
               padding: '6px 14px',
               cursor: 'pointer',
               borderRadius: 2,
-              color: '#00d4ff',
+              color: '#5FD0D8',
               transition: 'all 0.2s',
             }}
-            onMouseOver={e => e.target.style.background = 'rgba(0,212,255,0.15)'}
+            onMouseOver={e => e.target.style.background = 'rgba(95,208,216,0.15)'}
             onMouseOut={e => e.target.style.background = 'none'}
           >
             ← BACK
@@ -82,7 +82,7 @@ export default function DetailPanel() {
         {/* Content */}
         <div style={{
           background: '#060f1a',
-          border: '1px solid rgba(0,212,255,0.25)',
+          border: '1px solid rgba(95,208,216,0.25)',
           borderRadius: 4,
           padding: 20,
           minHeight: 200,
@@ -93,7 +93,7 @@ export default function DetailPanel() {
                 {[0,1,2].map(i => (
                   <div key={i} style={{
                     width: 6, height: 6,
-                    background: '#00d4ff',
+                    background: '#5FD0D8',
                     borderRadius: '50%',
                     animation: `dot-bounce 1.2s ease-in-out ${i * 0.2}s infinite`,
                   }} />
@@ -117,11 +117,11 @@ export default function DetailPanel() {
                 display: 'flex', alignItems: 'center', gap: 8,
                 fontFamily: "'Orbitron', sans-serif",
                 fontSize: 9, letterSpacing: 3,
-                color: '#00d4ff',
+                color: '#5FD0D8',
                 marginBottom: 16,
               }}>
                 ELLIE // INTELLIGENCE BRIEF FOR DREW
-                <div style={{ flex: 1, height: 1, background: 'rgba(0,212,255,0.2)' }} />
+                <div style={{ flex: 1, height: 1, background: 'rgba(95,208,216,0.2)' }} />
               </div>
               <div
                 style={{ fontSize: 14, lineHeight: 1.8, color: '#cceeff' }}

@@ -3,11 +3,10 @@ import { SignedIn, SignedOut, RedirectToSignIn } from '@clerk/clerk-react'
 import LoginPage from './pages/LoginPage'
 import LobbyPage from './pages/LobbyPage'
 import DashboardPage from './pages/DashboardPage'
-import WorldPage from './pages/WorldPage'
-import PersonalPage from './pages/PersonalPage'
+import OwnerSuitePage from './pages/OwnerSuitePage'
+import WorldOpsPage from './pages/WorldOpsPage'
 import TradingDashboard from './trading/TradingDashboard'
 import BusinessFactory from './pages/BusinessFactory'
-import OGDashboard from './pages/OGDashboard'
 import PrivacyPolicy from './pages/PrivacyPolicy'
 import Layout from './components/shared/Layout'
 
@@ -31,17 +30,19 @@ export default function App() {
           }
         >
           <Route index element={<LobbyPage />} />
-          <Route path="trading"  element={<TradingDashboard />} />
-          <Route path="business" element={<BusinessFactory />} />
-          <Route path="og" element={<OGDashboard />}>
-            <Route index element={<Navigate to="world" replace />} />
-            <Route path="world"    element={<WorldPage />} />
-            <Route path="personal" element={<PersonalPage />} />
-          </Route>
-          {/* Legacy direct routes still work */}
+          <Route path="trading"   element={<TradingDashboard />} />
+          <Route path="business"  element={<BusinessFactory />} />
+          {/* Floors split out of the old OG dashboard */}
+          <Route path="world-ops" element={<WorldOpsPage />} />
+          <Route path="suite"     element={<OwnerSuitePage />} />
+          {/* Legacy redirects — old OG / world / personal links keep working */}
+          <Route path="og"          element={<Navigate to="/world-ops" replace />} />
+          <Route path="og/world"    element={<Navigate to="/world-ops" replace />} />
+          <Route path="og/personal" element={<Navigate to="/suite" replace />} />
+          <Route path="world"       element={<Navigate to="/world-ops" replace />} />
+          <Route path="personal"    element={<Navigate to="/suite" replace />} />
+          {/* Legacy dashboard still works */}
           <Route path="dashboard" element={<DashboardPage />} />
-          <Route path="world"     element={<WorldPage />} />
-          <Route path="personal"  element={<PersonalPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

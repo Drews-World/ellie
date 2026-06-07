@@ -50,7 +50,7 @@ function BusinessIcon() {
   )
 }
 
-function OGIcon() {
+function WorldOpsIcon() {
   return (
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4"
       style={{ width: '100%', height: '100%', display: 'block' }}>
@@ -67,12 +67,27 @@ function OGIcon() {
   )
 }
 
+function SuiteIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"
+      style={{ width: '100%', height: '100%', display: 'block' }}>
+      {/* Journal / personal log */}
+      <rect x="3" y="2" width="14" height="16" rx="1.5"/>
+      <line x1="7" y1="2" x2="7" y2="18" strokeWidth="1.1"/>
+      <line x1="10" y1="6"   x2="14.5" y2="6"   strokeWidth="1.3" strokeLinecap="round"/>
+      <line x1="10" y1="9.5" x2="14.5" y2="9.5" strokeWidth="1.3" strokeLinecap="round"/>
+      <line x1="10" y1="13"  x2="13"   y2="13"  strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  )
+}
+
 // ── Nav definition ────────────────────────────────────────────────────────────
 const NAV = [
-  { to: '/',         label: 'Lobby',    icon: <LobbyIcon />,    end: true },
-  { to: '/trading',  label: 'Trading',  icon: <TradingIcon />              },
-  { to: '/business', label: 'Business', icon: <BusinessIcon />             },
-  { to: '/og',       label: 'OG Dash',  icon: <OGIcon />                   },
+  { to: '/',          label: 'Lobby',     icon: <LobbyIcon />,    end: true },
+  { to: '/trading',   label: 'Trading',   icon: <TradingIcon />             },
+  { to: '/business',  label: 'Business',  icon: <BusinessIcon />            },
+  { to: '/world-ops', label: 'World Ops', icon: <WorldOpsIcon />            },
+  { to: '/suite',     label: 'Suite',     icon: <SuiteIcon />               },
 ]
 
 export default function Sidebar() {

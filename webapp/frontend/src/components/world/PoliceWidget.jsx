@@ -21,8 +21,8 @@ const PRIORITY_MAP = {
   'TRESPASS':               { color: '#ffb300', badge: 'ACTIVE' },
   'SUSPICIOUS PERSON':      { color: '#ffb300', badge: 'ACTIVE' },
   'DUI':                    { color: '#ffb300', badge: 'ACTIVE' },
-  'TRAFFIC':                { color: '#00d4ff', badge: 'TRAFFIC' },
-  'ACCIDENT':               { color: '#00d4ff', badge: 'TRAFFIC' },
+  'TRAFFIC':                { color: '#5FD0D8', badge: 'TRAFFIC' },
+  'ACCIDENT':               { color: '#5FD0D8', badge: 'TRAFFIC' },
   'WELFARE CHECK':          { color: '#a78bfa', badge: 'WELFARE' },
   'MENTAL HEALTH':          { color: '#a78bfa', badge: 'WELFARE' },
   'THEFT':                  { color: 'rgba(180,220,255,0.5)', badge: 'PROPERTY' },
@@ -111,7 +111,7 @@ export default function PoliceWidget() {
   return (
     <div style={{
       background: '#060f1a',
-      border: '1px solid rgba(0,212,255,0.2)',
+      border: '1px solid rgba(95,208,216,0.2)',
       borderRadius: 4,
       overflow: 'hidden',
       width: '100%',
@@ -121,12 +121,12 @@ export default function PoliceWidget() {
       {/* ── Header ── */}
       <div style={{
         padding: '8px 12px',
-        borderBottom: '1px solid rgba(0,212,255,0.15)',
-        background: 'rgba(0,212,255,0.02)',
+        borderBottom: '1px solid rgba(95,208,216,0.15)',
+        background: 'rgba(95,208,216,0.02)',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontFamily: orb, fontSize: 9, letterSpacing: 3, color: '#00d4ff', fontWeight: 700 }}>
+            <span style={{ fontFamily: orb, fontSize: 9, letterSpacing: 3, color: '#5FD0D8', fontWeight: 700 }}>
               DISPATCH FEED
             </span>
             <span style={{ fontFamily: mono, fontSize: 7, color: 'rgba(180,220,255,0.35)', letterSpacing: 1 }}>
@@ -145,8 +145,8 @@ export default function PoliceWidget() {
             )}
           </div>
           <button onClick={fetchDispatch} style={{
-            background: 'none', border: '1px solid rgba(0,212,255,0.18)',
-            borderRadius: 2, color: 'rgba(0,212,255,0.5)',
+            background: 'none', border: '1px solid rgba(95,208,216,0.18)',
+            borderRadius: 2, color: 'rgba(95,208,216,0.5)',
             fontFamily: mono, fontSize: 9, padding: '2px 6px', cursor: 'pointer',
           }}>↻</button>
         </div>
@@ -155,10 +155,10 @@ export default function PoliceWidget() {
         <div style={{ display: 'flex', gap: 4, marginTop: 7, flexWrap: 'wrap' }}>
           {BADGE_FILTERS.map(f => (
             <button key={f} onClick={() => setFilter(f)} style={{
-              background: filter === f ? 'rgba(0,212,255,0.1)' : 'none',
-              border: `1px solid ${filter === f ? 'rgba(0,212,255,0.5)' : 'rgba(0,212,255,0.12)'}`,
+              background: filter === f ? 'rgba(95,208,216,0.1)' : 'none',
+              border: `1px solid ${filter === f ? 'rgba(95,208,216,0.5)' : 'rgba(95,208,216,0.12)'}`,
               borderRadius: 2,
-              color: filter === f ? '#00d4ff' : 'rgba(180,220,255,0.35)',
+              color: filter === f ? '#5FD0D8' : 'rgba(180,220,255,0.35)',
               fontFamily: mono, fontSize: 7, letterSpacing: 1,
               padding: '2px 6px', cursor: 'pointer', transition: 'all 0.15s',
             }}>
@@ -205,14 +205,14 @@ export default function PoliceWidget() {
                 }
               }}
               style={{
-                borderBottom: '1px solid rgba(0,212,255,0.06)',
+                borderBottom: '1px solid rgba(95,208,216,0.06)',
                 borderLeft: `2px solid ${color}`,
                 padding: '6px 12px 6px 10px',
                 cursor: 'pointer',
-                background: isOpen ? 'rgba(0,212,255,0.04)' : 'transparent',
+                background: isOpen ? 'rgba(95,208,216,0.04)' : 'transparent',
                 transition: 'background 0.1s',
               }}
-              onMouseEnter={e => { if (!isOpen) e.currentTarget.style.background = 'rgba(0,212,255,0.03)' }}
+              onMouseEnter={e => { if (!isOpen) e.currentTarget.style.background = 'rgba(95,208,216,0.03)' }}
               onMouseLeave={e => { if (!isOpen) e.currentTarget.style.background = 'transparent' }}
             >
               {/* Row 1: badge + type + time */}
@@ -244,7 +244,7 @@ export default function PoliceWidget() {
                   </span>
                 )}
                 {inc.lat && inc.lng && (
-                  <span style={{ fontFamily: mono, fontSize: 7, color: 'rgba(0,212,255,0.45)', marginLeft: 'auto' }}
+                  <span style={{ fontFamily: mono, fontSize: 7, color: 'rgba(95,208,216,0.45)', marginLeft: 'auto' }}
                     title="Click to fly satellite map to this location">
                     📍
                   </span>
@@ -255,7 +255,7 @@ export default function PoliceWidget() {
               {isOpen && (
                 <div style={{
                   marginTop: 6, paddingTop: 6,
-                  borderTop: '1px solid rgba(0,212,255,0.1)',
+                  borderTop: '1px solid rgba(95,208,216,0.1)',
                   display: 'flex', flexDirection: 'column', gap: 3,
                 }}>
                   {[
@@ -283,7 +283,7 @@ export default function PoliceWidget() {
       {/* Footer */}
       {lastUpdate && (
         <div style={{
-          padding: '3px 12px', borderTop: '1px solid rgba(0,212,255,0.06)',
+          padding: '3px 12px', borderTop: '1px solid rgba(95,208,216,0.06)',
           fontFamily: mono, fontSize: 7, color: 'rgba(180,220,255,0.2)', letterSpacing: 1,
           display: 'flex', justifyContent: 'space-between',
         }}>

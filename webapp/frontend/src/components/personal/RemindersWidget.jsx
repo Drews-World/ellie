@@ -3,7 +3,7 @@ import { useEllieStore } from '../../store'
 import { createReminder, updateReminder, deleteReminder } from '../../lib/api'
 import Widget from '../shared/Widget'
 
-const PRIORITIES = { high: '#ff3b3b', medium: '#ffb300', low: '#00d4ff' }
+const PRIORITIES = { high: '#ff3b3b', medium: '#ffb300', low: '#5FD0D8' }
 
 export default function RemindersWidget() {
   const { reminders, setReminders } = useEllieStore()
@@ -47,8 +47,8 @@ export default function RemindersWidget() {
           onClick={(e) => { e.stopPropagation(); setShowAdd(!showAdd) }}
           style={{
             fontFamily: orb, fontSize: 8, letterSpacing: 1,
-            background: 'rgba(0,212,255,0.1)', border: '1px solid rgba(0,212,255,0.3)',
-            color: '#00d4ff', padding: '3px 8px', borderRadius: 2, cursor: 'pointer',
+            background: 'rgba(95,208,216,0.1)', border: '1px solid rgba(95,208,216,0.3)',
+            color: '#5FD0D8', padding: '3px 8px', borderRadius: 2, cursor: 'pointer',
           }}
         >+ ADD</button>
       </div>
@@ -60,7 +60,7 @@ export default function RemindersWidget() {
             value={newItem.title}
             onChange={e => setNewItem({...newItem, title: e.target.value})}
             style={{
-              background: 'rgba(0,212,255,0.05)', border: '1px solid rgba(0,212,255,0.2)',
+              background: 'rgba(95,208,216,0.05)', border: '1px solid rgba(95,208,216,0.2)',
               color: '#cceeff', padding: '6px 8px', borderRadius: 2,
               fontFamily: "'Rajdhani', sans-serif", fontSize: 12, width: '100%',
             }}
@@ -71,7 +71,7 @@ export default function RemindersWidget() {
               value={newItem.due_date}
               onChange={e => setNewItem({...newItem, due_date: e.target.value})}
               style={{
-                flex: 1, background: 'rgba(0,212,255,0.05)', border: '1px solid rgba(0,212,255,0.2)',
+                flex: 1, background: 'rgba(95,208,216,0.05)', border: '1px solid rgba(95,208,216,0.2)',
                 color: '#cceeff', padding: '6px 8px', borderRadius: 2,
                 fontFamily: mono, fontSize: 11,
               }}
@@ -80,7 +80,7 @@ export default function RemindersWidget() {
               value={newItem.priority}
               onChange={e => setNewItem({...newItem, priority: e.target.value})}
               style={{
-                background: 'rgba(0,212,255,0.05)', border: '1px solid rgba(0,212,255,0.2)',
+                background: 'rgba(95,208,216,0.05)', border: '1px solid rgba(95,208,216,0.2)',
                 color: '#cceeff', padding: '6px 8px', borderRadius: 2,
                 fontFamily: mono, fontSize: 10,
               }}
@@ -93,8 +93,8 @@ export default function RemindersWidget() {
           <button
             onClick={handleAdd}
             style={{
-              background: 'rgba(0,212,255,0.15)', border: '1px solid rgba(0,212,255,0.4)',
-              color: '#00d4ff', fontFamily: orb, fontSize: 8, letterSpacing: 2,
+              background: 'rgba(95,208,216,0.15)', border: '1px solid rgba(95,208,216,0.4)',
+              color: '#5FD0D8', fontFamily: orb, fontSize: 8, letterSpacing: 2,
               padding: '6px', borderRadius: 2, cursor: 'pointer',
             }}
           >CONFIRM</button>
@@ -104,13 +104,13 @@ export default function RemindersWidget() {
       {pending.map(r => (
         <div key={r.id} style={{
           display: 'flex', alignItems: 'center', gap: 8,
-          padding: '6px 0', borderBottom: '1px solid rgba(0,212,255,0.06)',
+          padding: '6px 0', borderBottom: '1px solid rgba(95,208,216,0.06)',
         }}>
           <div
             onClick={(e) => { e.stopPropagation(); handleToggle(r) }}
             style={{
               width: 14, height: 14, borderRadius: 2,
-              border: `1px solid ${PRIORITIES[r.priority] || '#00d4ff'}`,
+              border: `1px solid ${PRIORITIES[r.priority] || '#5FD0D8'}`,
               cursor: 'pointer', flexShrink: 0,
               background: r.completed ? PRIORITIES[r.priority] : 'transparent',
             }}

@@ -35,7 +35,7 @@ export default function ThreatWidget() {
         const score = sector?.score ?? null
         const color = score != null ? scoreColor(score) : 'rgba(180,220,255,0.3)'
         return (
-          <div key={key} style={{ padding: '6px 0', borderBottom: '1px solid rgba(0,212,255,0.06)' }}>
+          <div key={key} style={{ padding: '6px 0', borderBottom: '1px solid rgba(95,208,216,0.06)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
               <span style={{ fontFamily: mono, fontSize: 9, color: 'rgba(180,220,255,0.6)', letterSpacing: 1 }}>{label}</span>
               <span style={{ fontFamily: orb, fontSize: 9, color, letterSpacing: 1 }}>
@@ -43,7 +43,7 @@ export default function ThreatWidget() {
               </span>
             </div>
             {score != null && (
-              <div style={{ height: 3, background: 'rgba(0,212,255,0.1)', borderRadius: 2, overflow: 'hidden' }}>
+              <div style={{ height: 3, background: 'rgba(95,208,216,0.1)', borderRadius: 2, overflow: 'hidden' }}>
                 <div style={{
                   height: '100%', width: `${score}%`,
                   background: color,

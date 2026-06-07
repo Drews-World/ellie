@@ -60,12 +60,12 @@ export default function CalendarWidget() {
       {/* Month nav */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <button onClick={() => setCurrentMonth(d => new Date(d.getFullYear(), d.getMonth() - 1))}
-          style={{ background: 'none', border: 'none', color: '#00d4ff', cursor: 'pointer', fontSize: 14 }}>‹</button>
-        <span style={{ fontFamily: orb, fontSize: 10, letterSpacing: 2, color: '#00d4ff' }}>
+          style={{ background: 'none', border: 'none', color: '#5FD0D8', cursor: 'pointer', fontSize: 14 }}>‹</button>
+        <span style={{ fontFamily: orb, fontSize: 10, letterSpacing: 2, color: '#5FD0D8' }}>
           {format(currentMonth, 'MMMM yyyy').toUpperCase()}
         </span>
         <button onClick={() => setCurrentMonth(d => new Date(d.getFullYear(), d.getMonth() + 1))}
-          style={{ background: 'none', border: 'none', color: '#00d4ff', cursor: 'pointer', fontSize: 14 }}>›</button>
+          style={{ background: 'none', border: 'none', color: '#5FD0D8', cursor: 'pointer', fontSize: 14 }}>›</button>
       </div>
 
       {/* Day headers */}
@@ -94,9 +94,9 @@ export default function CalendarWidget() {
                 cursor: 'pointer',
                 fontFamily: mono,
                 fontSize: 11,
-                background: selected ? 'rgba(0,212,255,0.2)' : today ? 'rgba(0,212,255,0.06)' : 'transparent',
-                border: today ? '1px solid rgba(0,212,255,0.4)' : '1px solid transparent',
-                color: selected ? '#00d4ff' : today ? '#cceeff' : 'rgba(180,220,255,0.6)',
+                background: selected ? 'rgba(95,208,216,0.2)' : today ? 'rgba(95,208,216,0.06)' : 'transparent',
+                border: today ? '1px solid rgba(95,208,216,0.4)' : '1px solid transparent',
+                color: selected ? '#5FD0D8' : today ? '#cceeff' : 'rgba(180,220,255,0.6)',
                 position: 'relative',
               }}
             >
@@ -114,7 +114,7 @@ export default function CalendarWidget() {
       </div>
 
       {/* Selected day events */}
-      <div style={{ borderTop: '1px solid rgba(0,212,255,0.1)', paddingTop: 10 }}>
+      <div style={{ borderTop: '1px solid rgba(95,208,216,0.1)', paddingTop: 10 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <span style={{ fontFamily: orb, fontSize: 8, letterSpacing: 2, color: 'rgba(180,220,255,0.5)' }}>
             {format(selectedDay, 'MMM d, yyyy').toUpperCase()}
@@ -123,8 +123,8 @@ export default function CalendarWidget() {
             onClick={(e) => { e.stopPropagation(); setShowAddForm(!showAddForm) }}
             style={{
               fontFamily: orb, fontSize: 8, letterSpacing: 1,
-              background: 'rgba(0,212,255,0.1)', border: '1px solid rgba(0,212,255,0.3)',
-              color: '#00d4ff', padding: '3px 8px', borderRadius: 2, cursor: 'pointer',
+              background: 'rgba(95,208,216,0.1)', border: '1px solid rgba(95,208,216,0.3)',
+              color: '#5FD0D8', padding: '3px 8px', borderRadius: 2, cursor: 'pointer',
             }}
           >
             + ADD
@@ -138,7 +138,7 @@ export default function CalendarWidget() {
               value={newEvent.title}
               onChange={e => setNewEvent({...newEvent, title: e.target.value})}
               style={{
-                background: 'rgba(0,212,255,0.05)', border: '1px solid rgba(0,212,255,0.2)',
+                background: 'rgba(95,208,216,0.05)', border: '1px solid rgba(95,208,216,0.2)',
                 color: '#cceeff', padding: '6px 8px', borderRadius: 2,
                 fontFamily: "'Rajdhani', sans-serif", fontSize: 12, width: '100%',
               }}
@@ -148,7 +148,7 @@ export default function CalendarWidget() {
               value={newEvent.time}
               onChange={e => setNewEvent({...newEvent, time: e.target.value})}
               style={{
-                background: 'rgba(0,212,255,0.05)', border: '1px solid rgba(0,212,255,0.2)',
+                background: 'rgba(95,208,216,0.05)', border: '1px solid rgba(95,208,216,0.2)',
                 color: '#cceeff', padding: '6px 8px', borderRadius: 2,
                 fontFamily: mono, fontSize: 12, width: '100%',
               }}
@@ -156,8 +156,8 @@ export default function CalendarWidget() {
             <button
               onClick={handleAddEvent}
               style={{
-                background: 'rgba(0,212,255,0.15)', border: '1px solid rgba(0,212,255,0.4)',
-                color: '#00d4ff', fontFamily: orb, fontSize: 8, letterSpacing: 2,
+                background: 'rgba(95,208,216,0.15)', border: '1px solid rgba(95,208,216,0.4)',
+                color: '#5FD0D8', fontFamily: orb, fontSize: 8, letterSpacing: 2,
                 padding: '6px', borderRadius: 2, cursor: 'pointer',
               }}
             >
@@ -175,8 +175,8 @@ export default function CalendarWidget() {
             <div key={event.id} style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               padding: '6px 8px',
-              background: 'rgba(0,212,255,0.04)',
-              border: '1px solid rgba(0,212,255,0.1)',
+              background: 'rgba(95,208,216,0.04)',
+              border: '1px solid rgba(95,208,216,0.1)',
               borderRadius: 2,
               marginBottom: 4,
             }}>

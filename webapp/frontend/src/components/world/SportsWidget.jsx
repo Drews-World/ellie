@@ -44,11 +44,11 @@ export default function SportsWidget() {
               {/* League header */}
               <div style={{
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                fontFamily: orb, fontSize: 8, letterSpacing: 2, color: '#00d4ff', marginBottom: 5,
+                fontFamily: orb, fontSize: 8, letterSpacing: 2, color: '#5FD0D8', marginBottom: 5,
               }}>
                 <span>{LEAGUE_LABELS[league]}</span>
                 {allEvents.length > 0 && (
-                  <span style={{ fontFamily: mono, fontSize: 8, color: 'rgba(0,212,255,0.5)' }}>
+                  <span style={{ fontFamily: mono, fontSize: 8, color: 'rgba(95,208,216,0.5)' }}>
                     {allEvents.length} GAME{allEvents.length !== 1 ? 'S' : ''}
                   </span>
                 )}
@@ -66,7 +66,7 @@ export default function SportsWidget() {
                     const live   = ev.status?.type?.state === 'in'
                     return (
                       <div key={i} style={{
-                        padding: '5px 0', borderBottom: '1px solid rgba(0,212,255,0.05)',
+                        padding: '5px 0', borderBottom: '1px solid rgba(95,208,216,0.05)',
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                       }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -93,7 +93,7 @@ export default function SportsWidget() {
                       style={{
                         marginTop: 4, background: 'none', border: 'none', cursor: 'pointer',
                         fontFamily: mono, fontSize: 8, letterSpacing: 1,
-                        color: 'rgba(0,212,255,0.6)',
+                        color: 'rgba(95,208,216,0.6)',
                         padding: '3px 0',
                       }}
                     >

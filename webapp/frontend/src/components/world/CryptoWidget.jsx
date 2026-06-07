@@ -38,9 +38,9 @@ export default function CryptoWidget() {
         return (
           <div key={id} style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            padding: '7px 0', borderBottom: '1px solid rgba(0,212,255,0.06)',
+            padding: '7px 0', borderBottom: '1px solid rgba(95,208,216,0.06)',
           }}>
-            <span style={{ fontFamily: orb, fontSize: 9, letterSpacing: 1, color: '#00d4ff', width: 44 }}>{label}</span>
+            <span style={{ fontFamily: orb, fontSize: 9, letterSpacing: 1, color: '#5FD0D8', width: 44 }}>{label}</span>
             <span style={{ fontFamily: mono, fontSize: 12, color: '#cceeff', flex: 1, textAlign: 'right' }}>
               {price != null ? `$${price.toLocaleString()}` : '—'}
             </span>

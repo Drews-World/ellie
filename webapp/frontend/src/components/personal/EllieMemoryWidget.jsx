@@ -38,8 +38,8 @@ export default function EllieMemoryWidget() {
           onClick={(e) => { e.stopPropagation(); setShowAdd(!showAdd) }}
           style={{
             fontFamily: orb, fontSize: 8, letterSpacing: 1,
-            background: 'rgba(0,212,255,0.1)', border: '1px solid rgba(0,212,255,0.3)',
-            color: '#00d4ff', padding: '3px 8px', borderRadius: 2, cursor: 'pointer',
+            background: 'rgba(95,208,216,0.1)', border: '1px solid rgba(95,208,216,0.3)',
+            color: '#5FD0D8', padding: '3px 8px', borderRadius: 2, cursor: 'pointer',
           }}
         >+ ADD</button>
       </div>
@@ -51,7 +51,7 @@ export default function EllieMemoryWidget() {
             value={newKey}
             onChange={e => setNewKey(e.target.value)}
             style={{
-              background: 'rgba(0,212,255,0.05)', border: '1px solid rgba(0,212,255,0.2)',
+              background: 'rgba(95,208,216,0.05)', border: '1px solid rgba(95,208,216,0.2)',
               color: '#cceeff', padding: '6px 8px', borderRadius: 2,
               fontFamily: mono, fontSize: 11, width: '100%',
             }}
@@ -61,7 +61,7 @@ export default function EllieMemoryWidget() {
             value={newVal}
             onChange={e => setNewVal(e.target.value)}
             style={{
-              background: 'rgba(0,212,255,0.05)', border: '1px solid rgba(0,212,255,0.2)',
+              background: 'rgba(95,208,216,0.05)', border: '1px solid rgba(95,208,216,0.2)',
               color: '#cceeff', padding: '6px 8px', borderRadius: 2,
               fontFamily: mono, fontSize: 11, width: '100%',
             }}
@@ -69,8 +69,8 @@ export default function EllieMemoryWidget() {
           <button
             onClick={handleAdd}
             style={{
-              background: 'rgba(0,212,255,0.15)', border: '1px solid rgba(0,212,255,0.4)',
-              color: '#00d4ff', fontFamily: orb, fontSize: 8, letterSpacing: 2,
+              background: 'rgba(95,208,216,0.15)', border: '1px solid rgba(95,208,216,0.4)',
+              color: '#5FD0D8', fontFamily: orb, fontSize: 8, letterSpacing: 2,
               padding: '6px', borderRadius: 2, cursor: 'pointer',
             }}
           >STORE</button>
@@ -85,10 +85,10 @@ export default function EllieMemoryWidget() {
         entries.map(([k, v]) => (
           <div key={k} style={{
             display: 'flex', gap: 8, alignItems: 'flex-start',
-            padding: '5px 0', borderBottom: '1px solid rgba(0,212,255,0.06)',
+            padding: '5px 0', borderBottom: '1px solid rgba(95,208,216,0.06)',
           }}>
             <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: orb, fontSize: 8, letterSpacing: 1, color: '#00d4ff', marginBottom: 2 }}>
+              <div style={{ fontFamily: orb, fontSize: 8, letterSpacing: 1, color: '#5FD0D8', marginBottom: 2 }}>
                 {k.toUpperCase()}
               </div>
               <div style={{ fontFamily: mono, fontSize: 10, color: 'rgba(180,220,255,0.7)' }}>{v}</div>

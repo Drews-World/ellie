@@ -42,7 +42,7 @@ const ZONES = [
 const SEVERITY_COLOR = {
   critical: '#ff3b3b',
   elevated: '#ffb300',
-  moderate: '#00d4ff',
+  moderate: '#5FD0D8',
   low:      '#00ff9d',
 }
 
@@ -142,13 +142,13 @@ export default function GlobeWidget() {
   const pointColor  = useCallback(d => SEVERITY_COLOR[d.severity], [])
   const pointRadius = useCallback(d => d.id === hoverId ? 2.2 : 1.5, [hoverId])
   const pointLabel  = useCallback(d =>
-    `<div style="font-family:'Orbitron',sans-serif;font-size:10px;color:#00d4ff;padding:4px 8px;background:rgba(6,15,26,0.92);border:1px solid rgba(0,212,255,0.45);border-radius:2px;white-space:nowrap">${d.name}</div>`,
+    `<div style="font-family:'Orbitron',sans-serif;font-size:10px;color:#5FD0D8;padding:4px 8px;background:rgba(6,15,26,0.92);border:1px solid rgba(95,208,216,0.45);border-radius:2px;white-space:nowrap">${d.name}</div>`,
   [])
 
   return (
     <div style={{
       background: '#060f1a',
-      border: '1px solid rgba(0,212,255,0.2)',
+      border: '1px solid rgba(95,208,216,0.2)',
       borderRadius: 4,
       overflow: 'hidden',
       position: 'relative',
@@ -160,10 +160,10 @@ export default function GlobeWidget() {
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         padding: '8px 12px',
-        borderBottom: '1px solid rgba(0,212,255,0.15)',
-        background: 'rgba(0,212,255,0.02)',
+        borderBottom: '1px solid rgba(95,208,216,0.15)',
+        background: 'rgba(95,208,216,0.02)',
       }}>
-        <div style={{ fontFamily: orb, fontSize: 9, letterSpacing: 3, color: '#00d4ff', fontWeight: 700 }}>
+        <div style={{ fontFamily: orb, fontSize: 9, letterSpacing: 3, color: '#5FD0D8', fontWeight: 700 }}>
           GLOBAL THREAT MAP
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
@@ -186,7 +186,7 @@ export default function GlobeWidget() {
             globeImageUrl="//unpkg.com/three-globe/example/img/earth-night.jpg"
             bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
             backgroundColor="rgba(3,12,20,1)"
-            atmosphereColor="#00d4ff"
+            atmosphereColor="#5FD0D8"
             atmosphereAltitude={0.1}
             pointsData={zones}
             pointLat="lat"
@@ -219,7 +219,7 @@ export default function GlobeWidget() {
             <div style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
               padding: '10px 14px 8px',
-              borderBottom: '1px solid rgba(0,212,255,0.1)',
+              borderBottom: '1px solid rgba(95,208,216,0.1)',
               position: 'sticky', top: 0, background: 'rgba(3,12,20,0.98)', zIndex: 1,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -231,7 +231,7 @@ export default function GlobeWidget() {
                   <div style={{ fontFamily: mono, fontSize: 8, color: 'rgba(180,220,255,0.45)', marginTop: 2, display: 'flex', gap: 8 }}>
                     <span style={{ color: accentColor }}>{activeSeverity.toUpperCase()}</span>
                     {intel.article_count > 0 && <span>{intel.article_count} SOURCES</span>}
-                    {intel.loading && <span style={{ color: '#00d4ff' }}>ACQUIRING...</span>}
+                    {intel.loading && <span style={{ color: '#5FD0D8' }}>ACQUIRING...</span>}
                   </div>
                 </div>
               </div>
@@ -248,7 +248,7 @@ export default function GlobeWidget() {
                   {[80, 60, 90, 55].map((w, i) => (
                     <div key={i} style={{
                       height: 8, width: `${w}%`, borderRadius: 2,
-                      background: 'rgba(0,212,255,0.12)',
+                      background: 'rgba(95,208,216,0.12)',
                       animation: 'intel-shimmer 1.4s ease-in-out infinite',
                       animationDelay: `${i * 0.1}s`,
                     }} />
@@ -268,7 +268,7 @@ export default function GlobeWidget() {
               {intel.assessment && (
                 <div style={{
                   marginBottom: 10, padding: '8px 10px',
-                  background: `rgba(${accentColor === SEVERITY_COLOR.critical ? '255,59,59' : accentColor === SEVERITY_COLOR.elevated ? '255,179,0' : '0,212,255'},0.07)`,
+                  background: `rgba(${accentColor === SEVERITY_COLOR.critical ? '255,59,59' : accentColor === SEVERITY_COLOR.elevated ? '255,179,0' : '95,208,216'},0.07)`,
                   border: `1px solid ${accentColor}30`,
                   borderRadius: 3,
                 }}>
@@ -316,8 +316,8 @@ export default function GlobeWidget() {
                       onClick={e => e.stopPropagation()}
                     >
                       <div
-                        style={{ padding: '7px 0', borderBottom: '1px solid rgba(0,212,255,0.07)', transition: 'background 0.15s', cursor: 'pointer' }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,212,255,0.05)'}
+                        style={{ padding: '7px 0', borderBottom: '1px solid rgba(95,208,216,0.07)', transition: 'background 0.15s', cursor: 'pointer' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(95,208,216,0.05)'}
                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                       >
                         <div style={{ fontFamily: raj, fontSize: 11, color: '#cceeff', lineHeight: 1.45, marginBottom: 3 }}>

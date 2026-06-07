@@ -152,7 +152,7 @@ export default function SatelliteWidget() {
   return (
     <div style={{
       background: '#060f1a',
-      border: '1px solid rgba(0,212,255,0.2)',
+      border: '1px solid rgba(95,208,216,0.2)',
       borderRadius: 4,
       overflow: 'hidden',
       width: '100%',
@@ -163,11 +163,11 @@ export default function SatelliteWidget() {
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         padding: '8px 12px',
-        borderBottom: '1px solid rgba(0,212,255,0.15)',
-        background: 'rgba(0,212,255,0.02)',
+        borderBottom: '1px solid rgba(95,208,216,0.15)',
+        background: 'rgba(95,208,216,0.02)',
         gap: 8, flexWrap: 'wrap',
       }}>
-        <div style={{ fontFamily: orb, fontSize: 9, letterSpacing: 3, color: '#00d4ff', fontWeight: 700 }}>
+        <div style={{ fontFamily: orb, fontSize: 9, letterSpacing: 3, color: '#5FD0D8', fontWeight: 700 }}>
           SATELLITE IMAGERY
         </div>
 
@@ -175,21 +175,21 @@ export default function SatelliteWidget() {
           {/* Base layer switcher */}
           {LAYERS.map(l => (
             <button key={l.id} onClick={() => setActiveLayer(l.id)} style={{
-              background: activeLayer === l.id ? 'rgba(0,212,255,0.15)' : 'none',
-              border: `1px solid ${activeLayer === l.id ? '#00d4ff' : 'rgba(0,212,255,0.2)'}`,
-              borderRadius: 2, color: activeLayer === l.id ? '#00d4ff' : 'rgba(180,220,255,0.45)',
+              background: activeLayer === l.id ? 'rgba(95,208,216,0.15)' : 'none',
+              border: `1px solid ${activeLayer === l.id ? '#5FD0D8' : 'rgba(95,208,216,0.2)'}`,
+              borderRadius: 2, color: activeLayer === l.id ? '#5FD0D8' : 'rgba(180,220,255,0.45)',
               fontFamily: mono, fontSize: 7, letterSpacing: 1,
               padding: '2px 7px', cursor: 'pointer', transition: 'all 0.15s',
             }}>{l.label}</button>
           ))}
 
           {/* Divider */}
-          <div style={{ width: 1, height: 14, background: 'rgba(0,212,255,0.15)' }} />
+          <div style={{ width: 1, height: 14, background: 'rgba(95,208,216,0.15)' }} />
 
           {/* Labels toggle */}
           <button onClick={() => setLabelsOn(v => !v)} style={{
             background: labelsOn ? 'rgba(255,179,0,0.12)' : 'none',
-            border: `1px solid ${labelsOn ? '#ffb300' : 'rgba(0,212,255,0.2)'}`,
+            border: `1px solid ${labelsOn ? '#ffb300' : 'rgba(95,208,216,0.2)'}`,
             borderRadius: 2, color: labelsOn ? '#ffb300' : 'rgba(180,220,255,0.4)',
             fontFamily: mono, fontSize: 7, letterSpacing: 1,
             padding: '2px 7px', cursor: 'pointer', transition: 'all 0.15s',
@@ -203,21 +203,21 @@ export default function SatelliteWidget() {
       {/* ── Hotspot quick-nav ── */}
       <div style={{
         display: 'flex', gap: 4, padding: '5px 10px', overflowX: 'auto',
-        borderBottom: '1px solid rgba(0,212,255,0.08)',
+        borderBottom: '1px solid rgba(95,208,216,0.08)',
         background: 'rgba(0,0,0,0.3)',
         scrollbarWidth: 'none',
       }}>
         {HOTSPOTS.map(h => (
           <button key={h.name} onClick={() => flyTo(h)} style={{
             background: 'none',
-            border: '1px solid rgba(0,212,255,0.18)',
+            border: '1px solid rgba(95,208,216,0.18)',
             borderRadius: 2, color: 'rgba(180,220,255,0.55)',
             fontFamily: mono, fontSize: 7, letterSpacing: 1,
             padding: '3px 8px', cursor: 'pointer', whiteSpace: 'nowrap',
             transition: 'all 0.15s', flexShrink: 0,
           }}
-          onMouseEnter={e => { e.currentTarget.style.color = '#00d4ff'; e.currentTarget.style.borderColor = 'rgba(0,212,255,0.5)' }}
-          onMouseLeave={e => { e.currentTarget.style.color = 'rgba(180,220,255,0.55)'; e.currentTarget.style.borderColor = 'rgba(0,212,255,0.18)' }}
+          onMouseEnter={e => { e.currentTarget.style.color = '#5FD0D8'; e.currentTarget.style.borderColor = 'rgba(95,208,216,0.5)' }}
+          onMouseLeave={e => { e.currentTarget.style.color = 'rgba(180,220,255,0.55)'; e.currentTarget.style.borderColor = 'rgba(95,208,216,0.18)' }}
           >{h.name}</button>
         ))}
       </div>
@@ -249,14 +249,14 @@ export default function SatelliteWidget() {
             }}>
               {coords && (
                 <div style={{
-                  fontFamily: mono, fontSize: 8, color: 'rgba(0,212,255,0.7)',
+                  fontFamily: mono, fontSize: 8, color: 'rgba(95,208,216,0.7)',
                   background: 'rgba(3,12,20,0.8)', padding: '2px 6px', borderRadius: 2,
                 }}>
                   {coords.lat}° {coords.lng}°
                 </div>
               )}
               <div style={{
-                fontFamily: mono, fontSize: 8, color: 'rgba(0,212,255,0.5)',
+                fontFamily: mono, fontSize: 8, color: 'rgba(95,208,216,0.5)',
                 background: 'rgba(3,12,20,0.8)', padding: '2px 6px', borderRadius: 2,
               }}>
                 Z{zoomLevel}
@@ -272,8 +272,8 @@ export default function SatelliteWidget() {
                 <button key={label} onClick={() => mapRef.current?.[i === 0 ? 'zoomIn' : 'zoomOut']()} style={{
                   width: 24, height: 24,
                   background: 'rgba(3,12,20,0.85)',
-                  border: '1px solid rgba(0,212,255,0.3)',
-                  borderRadius: 2, color: '#00d4ff',
+                  border: '1px solid rgba(95,208,216,0.3)',
+                  borderRadius: 2, color: '#5FD0D8',
                   fontFamily: mono, fontSize: 13,
                   cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>{label}</button>
@@ -314,7 +314,7 @@ export default function SatelliteWidget() {
             <div style={{
               position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999,
               pointerEvents: 'none',
-              background: 'linear-gradient(to bottom, rgba(0,212,255,0.025) 0%, transparent 8%, transparent 92%, rgba(0,212,255,0.025) 100%)',
+              background: 'linear-gradient(to bottom, rgba(95,208,216,0.025) 0%, transparent 8%, transparent 92%, rgba(95,208,216,0.025) 100%)',
             }} />
           </>
         )}

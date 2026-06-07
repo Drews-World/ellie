@@ -45,7 +45,7 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
-      {!location.pathname.startsWith('/business') && <EllieChat />}
+      {!location.pathname.startsWith('/business') && !location.pathname.startsWith('/world-ops') && <EllieChat />}
     </div>
   )
 }

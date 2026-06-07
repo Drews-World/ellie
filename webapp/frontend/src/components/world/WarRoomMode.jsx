@@ -32,7 +32,7 @@ const ZONES = [
 const SEV = {
   critical: { color: '#ff3b3b', bg: 'rgba(255,59,59,0.12)', border: 'rgba(255,59,59,0.3)', label: 'CRITICAL' },
   elevated: { color: '#ffb300', bg: 'rgba(255,179,0,0.1)',  border: 'rgba(255,179,0,0.25)', label: 'ELEVATED' },
-  moderate: { color: '#00d4ff', bg: 'rgba(0,212,255,0.08)', border: 'rgba(0,212,255,0.2)',  label: 'MODERATE' },
+  moderate: { color: '#5FD0D8', bg: 'rgba(95,208,216,0.08)', border: 'rgba(95,208,216,0.2)',  label: 'MODERATE' },
 }
 
 function timeAgo(iso) {
@@ -91,7 +91,7 @@ export default function WarRoomMode({ onClose }) {
   const zonePoints = useMemo(() => ZONES.map(z => ({
     lat: z.lat, lng: z.lng,
     size:  z.severity === 'critical' ? 0.6 : z.severity === 'elevated' ? 0.45 : 0.3,
-    color: SEV[z.severity]?.color ?? '#00d4ff',
+    color: SEV[z.severity]?.color ?? '#5FD0D8',
     label: z.name,
   })), [])
 
@@ -427,7 +427,7 @@ export default function WarRoomMode({ onClose }) {
         padding: '0 16px', gap: 18, overflow: 'hidden',
       }}>
         {ZONES.map(z => {
-          const c = SEV[z.severity]?.color || '#00d4ff'
+          const c = SEV[z.severity]?.color || '#5FD0D8'
           return (
             <div key={z.id} style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
               <div style={{ width: 5, height: 5, borderRadius: '50%', background: c, boxShadow: `0 0 4px ${c}` }}/>

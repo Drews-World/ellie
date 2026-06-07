@@ -53,7 +53,7 @@ export default function PrayerWidget() {
   }
 
   const CAT_COLOR = {
-    family: '#ffb300', health: '#00ff9d', work: '#00d4ff',
+    family: '#ffb300', health: '#00ff9d', work: '#5FD0D8',
     quill: '#a78bfa', relationships: '#f472b6',
     gratitude: '#34d399', general: 'rgba(180,220,255,0.4)',
   }
@@ -69,10 +69,10 @@ export default function PrayerWidget() {
             style={{
               flex: 1,
               padding: '4px 0',
-              background: tab === t ? 'rgba(0,212,255,0.12)' : 'none',
-              border: `1px solid ${tab === t ? 'var(--hud)' : 'rgba(0,212,255,0.15)'}`,
+              background: tab === t ? 'rgba(95,208,216,0.12)' : 'none',
+              border: `1px solid ${tab === t ? 'var(--hud)' : 'rgba(95,208,216,0.15)'}`,
               borderRadius: 2,
-              color: tab === t ? '#00d4ff' : 'rgba(180,220,255,0.4)',
+              color: tab === t ? '#5FD0D8' : 'rgba(180,220,255,0.4)',
               fontFamily: orb,
               fontSize: 8,
               letterSpacing: 2,
@@ -103,8 +103,8 @@ export default function PrayerWidget() {
             alignItems: 'flex-start',
             gap: 8,
             padding: '6px 8px',
-            background: 'rgba(0,212,255,0.02)',
-            border: '1px solid rgba(0,212,255,0.08)',
+            background: 'rgba(95,208,216,0.02)',
+            border: '1px solid rgba(95,208,216,0.08)',
             borderRadius: 2,
           }}>
             {/* Category dot */}
@@ -173,8 +173,8 @@ export default function PrayerWidget() {
             onKeyDown={e => { if (e.key === 'Enter') handleAdd(); if (e.key === 'Escape') setAdding(false) }}
             placeholder="Enter prayer item..."
             style={{
-              background: 'rgba(0,212,255,0.04)',
-              border: '1px solid rgba(0,212,255,0.3)',
+              background: 'rgba(95,208,216,0.04)',
+              border: '1px solid rgba(95,208,216,0.3)',
               borderRadius: 2, color: '#cceeff',
               fontFamily: raj, fontSize: 12,
               padding: '6px 10px', outline: 'none',
@@ -186,8 +186,8 @@ export default function PrayerWidget() {
               onChange={e => setNewCat(e.target.value)}
               style={{
                 flex: 1,
-                background: 'rgba(0,212,255,0.04)',
-                border: '1px solid rgba(0,212,255,0.2)',
+                background: 'rgba(95,208,216,0.04)',
+                border: '1px solid rgba(95,208,216,0.2)',
                 borderRadius: 2, color: 'rgba(180,220,255,0.7)',
                 fontFamily: mono, fontSize: 9, padding: '4px 6px',
               }}
@@ -195,13 +195,13 @@ export default function PrayerWidget() {
               {CATEGORIES.map(c => <option key={c} value={c}>{c.toUpperCase()}</option>)}
             </select>
             <button onClick={handleAdd} style={{
-              background: 'rgba(0,212,255,0.12)',
+              background: 'rgba(95,208,216,0.12)',
               border: '1px solid var(--hud)', borderRadius: 2,
-              color: '#00d4ff', fontFamily: orb, fontSize: 8,
+              color: '#5FD0D8', fontFamily: orb, fontSize: 8,
               letterSpacing: 1, padding: '0 12px', cursor: 'pointer',
             }}>ADD</button>
             <button onClick={() => setAdding(false)} style={{
-              background: 'none', border: '1px solid rgba(0,212,255,0.15)',
+              background: 'none', border: '1px solid rgba(95,208,216,0.15)',
               borderRadius: 2, color: 'rgba(180,220,255,0.4)',
               fontFamily: mono, fontSize: 9, padding: '0 10px', cursor: 'pointer',
             }}>✕</button>
@@ -213,14 +213,14 @@ export default function PrayerWidget() {
           style={{
             marginTop: 10, width: '100%',
             background: 'none',
-            border: '1px dashed rgba(0,212,255,0.2)',
+            border: '1px dashed rgba(95,208,216,0.2)',
             borderRadius: 2, color: 'rgba(180,220,255,0.4)',
             fontFamily: mono, fontSize: 9,
             letterSpacing: 1, padding: '6px 0',
             cursor: 'pointer', transition: 'all 0.15s',
           }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(0,212,255,0.5)'; e.currentTarget.style.color = '#00d4ff' }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(0,212,255,0.2)'; e.currentTarget.style.color = 'rgba(180,220,255,0.4)' }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(95,208,216,0.5)'; e.currentTarget.style.color = '#5FD0D8' }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(95,208,216,0.2)'; e.currentTarget.style.color = 'rgba(180,220,255,0.4)' }}
         >+ ADD PRAYER ITEM</button>
       )}
     </Widget>

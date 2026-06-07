@@ -19,12 +19,17 @@ const FLOORS = [
     desc: "ELLIE's crew researches niches, forges designs, and ships them to Etsy.",
   },
   {
-    to: '/og', label: 'OG Dashboard', sub: 'World & Personal', wing: 'Wing C',
+    to: '/world-ops', label: 'World Ops', sub: 'Live Intelligence', wing: 'Wing C',
     accent: 'var(--bp-accent)', scene: '/sprites/lobby-og.png',
-    desc: 'World intel, personal mode, prayer board, and IoT light control.',
+    desc: 'Real-time global OSINT — flights, maritime, quakes, fires, conflict zones, and the RECON toolkit.',
   },
   {
-    to: '/comms', label: 'Comms Bay', sub: 'Coming soon', wing: 'Wing D',
+    to: '/suite', label: 'Owner Suite', sub: 'Personal Command', wing: 'Wing D',
+    accent: 'var(--bp-sage)', emblem: '◇',
+    desc: 'Calendar, notes, goals, prayer board, and ELLIE’s memory of your world.',
+  },
+  {
+    to: '/comms', label: 'Comms Bay', sub: 'Coming soon', wing: 'Wing E',
     accent: 'var(--bp-clay)', scene: '/sprites/lobby-coming-soon.png', disabled: true,
     desc: 'Messaging, media, and more rooms on the way.',
   },
@@ -63,14 +68,27 @@ function FloorPortal({ floor, status }) {
     >
       {/* Scene preview */}
       <div style={{ position: 'relative', width: '100%', aspectRatio: '3 / 3.4', overflow: 'hidden' }}>
-        <img
-          src={floor.scene} alt="" draggable={false} className="bp-portal-scene"
-          style={{
-            position: 'absolute', inset: 0, width: '100%', height: '100%',
-            objectFit: 'cover', imageRendering: 'pixelated',
-            filter: floor.disabled ? 'brightness(0.7) saturate(0.7)' : 'brightness(0.92)',
-          }}
-        />
+        {floor.scene ? (
+          <img
+            src={floor.scene} alt="" draggable={false} className="bp-portal-scene"
+            style={{
+              position: 'absolute', inset: 0, width: '100%', height: '100%',
+              objectFit: 'cover', imageRendering: 'pixelated',
+              filter: floor.disabled ? 'brightness(0.7) saturate(0.7)' : 'brightness(0.92)',
+            }}
+          />
+        ) : (
+          <div className="bp-portal-scene" aria-hidden style={{
+            position: 'absolute', inset: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: `radial-gradient(120% 90% at 50% 22%, color-mix(in srgb, ${a} 32%, #11140f) 0%, #0c0f0a 70%)`,
+          }}>
+            <span style={{ fontSize: 'clamp(48px, 8vw, 88px)', color: a, opacity: 0.85,
+              textShadow: `0 0 26px color-mix(in srgb, ${a} 60%, transparent)` }}>
+              {floor.emblem || '◆'}
+            </span>
+          </div>
+        )}
 
         {/* Corner brackets */}
         <Bracket v="top" h="left" accent={a} />

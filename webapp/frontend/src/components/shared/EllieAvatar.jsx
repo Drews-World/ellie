@@ -256,7 +256,7 @@ export default function EllieAvatar() {
       width: '100%',
       height: '100%',
       background: '#060f1a',
-      border: '1px solid rgba(0,212,255,0.2)',
+      border: '1px solid rgba(95,208,216,0.2)',
       borderRadius: 4,
       display: 'flex',
       flexDirection: 'column',
@@ -270,7 +270,7 @@ export default function EllieAvatar() {
         position: 'absolute', top: 8, left: 0, right: 0,
         display: 'flex', justifyContent: 'center',
         fontFamily: orb, fontSize: 7, letterSpacing: 3,
-        color: 'rgba(0,212,255,0.4)',
+        color: 'rgba(95,208,216,0.4)',
       }}>ELLIE · AI</div>
 
       {/* Canvas */}
@@ -299,7 +299,7 @@ export default function EllieAvatar() {
       {/* Scan line overlay */}
       <div style={{
         position: 'absolute', inset: 0, pointerEvents: 'none',
-        background: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,212,255,0.015) 2px, rgba(0,212,255,0.015) 3px)',
+        background: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(95,208,216,0.015) 2px, rgba(95,208,216,0.015) 3px)',
       }}/>
     </div>
   )

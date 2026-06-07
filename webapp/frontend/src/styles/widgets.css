@@ -1,0 +1,95 @@
+/* ───────────────────────────────────────────────────────────────────────────
+   OG Dashboard — "machine-glow monitors"
+   The OG floor's data widgets are luminous dark-teal terminals embedded in the
+   sunlit biopunk office (HZD datapads / Faro screens). The shared <Widget>
+   wrapper carries these GLOBAL classes; the internals stay dark-HUD but the
+   accent is retuned to the single biopunk teal (--bp-accent family). Calm
+   motion only — no CRT/glitch.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.widget {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(130% 80% at 50% -12%, rgba(95, 208, 216, 0.10), transparent 60%),
+    linear-gradient(165deg, #0d2329 0%, #081519 100%);
+  border: 1px solid rgba(95, 208, 216, 0.20);
+  border-radius: var(--bp-r-md);
+  padding: 13px 15px;
+  box-shadow:
+    var(--bp-shadow-md),
+    0 0 0 1px rgba(95, 208, 216, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+  transition: transform var(--bp-dur) var(--bp-ease),
+              box-shadow var(--bp-dur) var(--bp-ease),
+              border-color var(--bp-dur) var(--bp-ease);
+}
+
+/* faint top sheen — reads as glass over a lit screen */
+.widget::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(95, 208, 216, 0.06) 0%, transparent 14%);
+}
+
+/* clickable widgets (have a widgetKey → openable detail) lift + glow */
+.widget-interactive:hover {
+  transform: translateY(-2px);
+  border-color: rgba(95, 208, 216, 0.50);
+  box-shadow:
+    var(--bp-shadow-lg),
+    0 0 24px rgba(95, 208, 216, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.widget-interactive:hover .expand-hint { opacity: 1 !important; }
+.widget-interactive:focus-visible {
+  outline: 2px solid var(--bp-accent-bright);
+  outline-offset: 2px;
+}
+
+.widget-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(95, 208, 216, 0.14);
+}
+
+.widget-title {
+  font-family: var(--bp-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #7fe4ea;
+  text-shadow: 0 0 12px rgba(95, 208, 216, 0.35);
+}
+
+.widget-body {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+/* new-data pulse: a teal breathing ring (fires a couple times then settles) */
+.widget-pulse { animation: widget-pulse-glow 1.4s var(--bp-ease) 2; }
+@keyframes widget-pulse-glow {
+  0%, 100% {
+    box-shadow: var(--bp-shadow-md), 0 0 0 1px rgba(95, 208, 216, 0.04),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+  50% {
+    box-shadow: var(--bp-shadow-md), 0 0 26px rgba(95, 208, 216, 0.40),
+                0 0 0 1px rgba(95, 208, 216, 0.50), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .widget, .widget-pulse { transition: none; animation: none; }
+}

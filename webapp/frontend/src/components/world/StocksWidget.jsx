@@ -42,9 +42,9 @@ export default function StocksWidget() {
               alignItems: 'center',
               justifyContent: 'space-between',
               padding: '4px 6px',
-              borderBottom: '1px solid rgba(0,212,255,0.06)',
+              borderBottom: '1px solid rgba(95,208,216,0.06)',
             }}>
-              <span style={{ fontFamily: orb, fontSize: 8, letterSpacing: 1, color: '#00d4ff', width: 44 }}>{sym}</span>
+              <span style={{ fontFamily: orb, fontSize: 8, letterSpacing: 1, color: '#5FD0D8', width: 44 }}>{sym}</span>
               <span style={{ fontFamily: mono, fontSize: 10, color: '#cceeff', flex: 1, textAlign: 'right', marginRight: 8 }}>
                 {t ? `$${t.c?.toFixed(2)}` : '—'}
               </span>

@@ -12,7 +12,7 @@ const MAP_H = 'clamp(220px, 30vh, 320px)'
 function altColor(alt) {
   if (!alt || alt < 0)  return '#00ff9d'   // ground / unknown
   if (alt < 3000)       return '#ffb300'   // low approach
-  if (alt < 8000)       return '#00d4ff'   // mid
+  if (alt < 8000)       return '#5FD0D8'   // mid
   return '#cceeff'                          // cruise
 }
 
@@ -169,7 +169,7 @@ export default function FlightWidget() {
   return (
     <div style={{
       background: '#060f1a',
-      border: '1px solid rgba(0,212,255,0.2)',
+      border: '1px solid rgba(95,208,216,0.2)',
       borderRadius: 4,
       overflow: 'hidden',
       width: '100%',
@@ -180,11 +180,11 @@ export default function FlightWidget() {
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         padding: '8px 12px',
-        borderBottom: '1px solid rgba(0,212,255,0.15)',
-        background: 'rgba(0,212,255,0.02)',
+        borderBottom: '1px solid rgba(95,208,216,0.15)',
+        background: 'rgba(95,208,216,0.02)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontFamily: orb, fontSize: 9, letterSpacing: 3, color: '#00d4ff', fontWeight: 700 }}>
+          <span style={{ fontFamily: orb, fontSize: 9, letterSpacing: 3, color: '#5FD0D8', fontWeight: 700 }}>
             FLIGHT TRACKER
           </span>
           {!loading && (
@@ -196,16 +196,16 @@ export default function FlightWidget() {
         <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
           {['map', 'list'].map(v => (
             <button key={v} onClick={() => setView(v)} style={{
-              background: view === v ? 'rgba(0,212,255,0.12)' : 'none',
-              border: `1px solid ${view === v ? '#00d4ff' : 'rgba(0,212,255,0.18)'}`,
-              borderRadius: 2, color: view === v ? '#00d4ff' : 'rgba(180,220,255,0.4)',
+              background: view === v ? 'rgba(95,208,216,0.12)' : 'none',
+              border: `1px solid ${view === v ? '#5FD0D8' : 'rgba(95,208,216,0.18)'}`,
+              borderRadius: 2, color: view === v ? '#5FD0D8' : 'rgba(180,220,255,0.4)',
               fontFamily: mono, fontSize: 7, letterSpacing: 1,
               padding: '2px 7px', cursor: 'pointer',
             }}>{v.toUpperCase()}</button>
           ))}
           <button onClick={fetchFlights} title="Refresh" style={{
-            background: 'none', border: '1px solid rgba(0,212,255,0.18)',
-            borderRadius: 2, color: 'rgba(0,212,255,0.5)',
+            background: 'none', border: '1px solid rgba(95,208,216,0.18)',
+            borderRadius: 2, color: 'rgba(95,208,216,0.5)',
             fontFamily: mono, fontSize: 9, padding: '2px 6px', cursor: 'pointer',
           }}>↻</button>
         </div>
@@ -230,7 +230,7 @@ export default function FlightWidget() {
             position: 'absolute', bottom: 6, left: 8, zIndex: 1000, pointerEvents: 'none',
             display: 'flex', flexDirection: 'column', gap: 2,
           }}>
-            {[['#cceeff', 'CRUISE 26K+ FT'], ['#00d4ff', 'MID 10-26K FT'], ['#ffb300', 'LOW <10K FT'], ['#00ff9d', 'GROUND']].map(([c, label]) => (
+            {[['#cceeff', 'CRUISE 26K+ FT'], ['#5FD0D8', 'MID 10-26K FT'], ['#ffb300', 'LOW <10K FT'], ['#00ff9d', 'GROUND']].map(([c, label]) => (
               <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(3,12,20,0.75)', padding: '1px 5px', borderRadius: 2 }}>
                 <div style={{ width: 6, height: 6, borderRadius: '50%', background: c }} />
                 <span style={{ fontFamily: mono, fontSize: 6, color: 'rgba(180,220,255,0.6)', letterSpacing: 1 }}>{label}</span>
@@ -243,11 +243,11 @@ export default function FlightWidget() {
         {selected && (
           <div style={{
             position: 'absolute', top: 6, left: 8, zIndex: 1000,
-            background: 'rgba(3,12,20,0.92)', border: '1px solid rgba(0,212,255,0.4)',
+            background: 'rgba(3,12,20,0.92)', border: '1px solid rgba(95,208,216,0.4)',
             borderRadius: 3, padding: '6px 10px', minWidth: 140,
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-              <span style={{ fontFamily: orb, fontSize: 9, color: '#00d4ff', letterSpacing: 1 }}>{selected.callsign}</span>
+              <span style={{ fontFamily: orb, fontSize: 9, color: '#5FD0D8', letterSpacing: 1 }}>{selected.callsign}</span>
               <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', color: 'rgba(180,220,255,0.4)', cursor: 'pointer', fontSize: 12, padding: 0 }}>×</button>
             </div>
             {[
@@ -267,7 +267,7 @@ export default function FlightWidget() {
         {/* Vignette */}
         <div style={{
           position: 'absolute', inset: 0, zIndex: 999, pointerEvents: 'none',
-          background: 'linear-gradient(to bottom, rgba(0,212,255,0.02) 0%, transparent 8%, transparent 92%, rgba(0,212,255,0.02) 100%)',
+          background: 'linear-gradient(to bottom, rgba(95,208,216,0.02) 0%, transparent 8%, transparent 92%, rgba(95,208,216,0.02) 100%)',
         }} />
       </div>
 
@@ -292,20 +292,20 @@ export default function FlightWidget() {
               style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 padding: '5px 12px',
-                borderBottom: '1px solid rgba(0,212,255,0.06)',
+                borderBottom: '1px solid rgba(95,208,216,0.06)',
                 cursor: 'pointer',
-                background: selected?.icao === f.icao ? 'rgba(0,212,255,0.07)' : 'transparent',
+                background: selected?.icao === f.icao ? 'rgba(95,208,216,0.07)' : 'transparent',
                 transition: 'background 0.1s',
               }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,212,255,0.05)'}
-              onMouseLeave={e => e.currentTarget.style.background = selected?.icao === f.icao ? 'rgba(0,212,255,0.07)' : 'transparent'}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(95,208,216,0.05)'}
+              onMouseLeave={e => e.currentTarget.style.background = selected?.icao === f.icao ? 'rgba(95,208,216,0.07)' : 'transparent'}
             >
               <div style={{
                 width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
                 background: altColor(f.altitude),
                 boxShadow: `0 0 4px ${altColor(f.altitude)}`,
               }} />
-              <span style={{ fontFamily: orb, fontSize: 8, color: '#00d4ff', width: 72, letterSpacing: 1 }}>{f.callsign}</span>
+              <span style={{ fontFamily: orb, fontSize: 8, color: '#5FD0D8', width: 72, letterSpacing: 1 }}>{f.callsign}</span>
               <span style={{ fontFamily: mono, fontSize: 8, color: 'rgba(180,220,255,0.5)', flex: 1 }}>{f.country}</span>
               <span style={{ fontFamily: mono, fontSize: 8, color: '#cceeff', width: 60, textAlign: 'right' }}>
                 {f.on_ground ? 'GND' : f.altitude ? `${m2ft(f.altitude)} ft` : '—'}
@@ -322,7 +322,7 @@ export default function FlightWidget() {
       {lastUpdate && (
         <div style={{
           padding: '3px 12px',
-          borderTop: '1px solid rgba(0,212,255,0.06)',
+          borderTop: '1px solid rgba(95,208,216,0.06)',
           fontFamily: mono, fontSize: 7, color: 'rgba(180,220,255,0.25)', letterSpacing: 1,
         }}>
           SRC: {source === 'adsb.lol' ? 'ADSB.LOL' : source === 'opensky' ? 'OPENSKY' : 'UNKNOWN'} · SYNC {lastUpdate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })} · AUTO-REFRESH 60s

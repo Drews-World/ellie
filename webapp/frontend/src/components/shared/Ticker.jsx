@@ -9,11 +9,13 @@ export default function Ticker() {
 
   return (
     <div style={{
-      background: 'rgba(0,212,255,0.04)',
-      borderBottom: '1px solid rgba(0,212,255,0.25)',
-      overflow: 'hidden', height: 28,
+      background: 'linear-gradient(165deg, #0d2329 0%, #081519 100%)',
+      border: '1px solid rgba(95,208,216,0.20)',
+      borderRadius: 'var(--bp-r-md)',
+      boxShadow: 'var(--bp-shadow-md), inset 0 1px 0 rgba(255,255,255,0.05)',
+      overflow: 'hidden', height: 30,
       display: 'flex', alignItems: 'center',
-      padding: '0 10px', gap: 12,
+      padding: '0 12px', gap: 12,
     }}>
       <div style={{
         fontFamily: "'Orbitron', sans-serif",
@@ -30,7 +32,7 @@ export default function Ticker() {
           fontSize: 11, color: 'rgba(180,220,255,0.5)',
         }}>
           {doubled.map((item, i) => (
-            <span key={i} style={{ color: item.startsWith('⚡') ? '#00d4ff' : undefined }}>
+            <span key={i} style={{ color: item.startsWith('⚡') ? '#5FD0D8' : undefined }}>
               {item}
             </span>
           ))}
