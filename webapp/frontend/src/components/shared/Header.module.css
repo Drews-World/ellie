@@ -92,3 +92,16 @@
   margin-top: 1px;
   letter-spacing: 0.08em;
 }
+
+/* ── Responsive: shed the non-essentials so the bar stays one calm row ── */
+@media (max-width: 760px) {
+  .header { padding: 10px 14px; }
+  .center { display: none; }
+  .logoSub { display: none; }
+}
+@media (max-width: 440px) {
+  .date { display: none; }
+  .right { gap: 10px; }
+  .time { font-size: 13px; }
+  .logoName { font-size: 14px; }
+}

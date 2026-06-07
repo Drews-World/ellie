@@ -45,7 +45,7 @@ function PipelineBar({ pipeline }) {
     <Surface padding={16} style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
       <span style={{ fontFamily: 'var(--bp-font-mono)', fontSize: 'var(--bp-text-2xs)',
         letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--bp-ink-muted)' }}>Pipeline</span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 0, flex: 1, minWidth: 280 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 0, flex: 1, minWidth: 0, overflowX: 'auto' }}>
         {BUSINESS_CREW.pipeline.map((stage, i) => {
           const done = i < active
           const isActive = i === active
@@ -292,7 +292,7 @@ export default function BusinessFactory() {
         />
 
         {/* Console + cards/timeline */}
-        <div style={{ display: 'grid', gap: 18, gridTemplateColumns: 'minmax(0, 1fr) minmax(300px, 380px)' }}>
+        <div className="bf-main-grid">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0 }}>
             <div>
               <SectionHeader title="The crew" style={{ marginBottom: 12 }} />

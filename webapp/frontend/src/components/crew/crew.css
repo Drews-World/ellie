@@ -4,6 +4,10 @@
    ─────────────────────────────────────────────────────────────────────────── */
 
 /* ── Graph canvas ────────────────────────────────────────────────────────── */
+/* On narrow screens the fixed-coordinate node graph would collide, so it keeps
+   a comfortable min-width and scrolls horizontally inside this wrapper. */
+.crew-graph-scroll { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
 .crew-graph {
   position: relative;
   width: 100%;
@@ -207,3 +211,19 @@
 .crew-tl-msg { font-size: 12.5px; color: var(--bp-ink-2); line-height: 1.45; flex: 1; }
 .crew-tl-time { font-family: var(--bp-font-mono); font-size: 10px; color: var(--bp-ink-faint); flex-shrink: 0; }
 .crew-empty { font-size: 12.5px; color: var(--bp-ink-faint); font-style: italic; padding: 8px 0; }
+
+/* ── Business floor: main content + command console; stacks on mobile ─────── */
+.bf-main-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+}
+@media (max-width: 860px) {
+  .bf-main-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ── Mobile: give the node graph room and let it scroll horizontally ──────── */
+@media (max-width: 640px) {
+  .crew-graph { min-width: 520px; min-height: 380px; }
+  .crew-tl-agent { width: 60px; }
+}

@@ -30,6 +30,7 @@ export default function CrewGraph({
   const idx = agentIndex(crew)
 
   return (
+    <div className="crew-graph-scroll">
     <div className="crew-graph" role="group" aria-label={`${crew.label} crew graph`}>
       {/* Edges */}
       <svg className="crew-edges" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
@@ -99,6 +100,7 @@ export default function CrewGraph({
         <span><i style={{ background: 'var(--bp-st-idle)' }} /> Idle</span>
         <span><i style={{ background: 'var(--bp-ellie)' }} /> ELLIE</span>
       </div>
+    </div>
     </div>
   )
 }
