@@ -1,70 +1,62 @@
-import { useState } from 'react'
 import { Surface, Tag } from '../components/ui'
 
-// World Ops embeds the standalone OSIRIS OSINT dashboard (separate Next.js app,
-// deployed on its own Vercel project). Set VITE_OSIRIS_URL to that deployment's
-// origin. OSIRIS must allow framing from this origin (relaxed frame-ancestors).
-const OSIRIS_URL = (import.meta.env.VITE_OSIRIS_URL || '').trim()
-const OSIRIS_PUBLIC = 'https://osirisai.live'
+// World Ops links out to the standalone OSIRIS OSINT dashboard. OSIRIS blocks
+// cross-origin framing (X-Frame-Options: SAMEORIGIN), so we open it in a new
+// tab rather than embedding. Override the target with VITE_OSIRIS_URL if you
+// ever stand up your own framing-relaxed instance.
+const OSIRIS_URL = (import.meta.env.VITE_OSIRIS_URL || 'https://osirisai.live').trim()
 
-function NotConfigured() {
+const FEATURES = [
+  'Live flights', 'Maritime', 'Seismic', 'Active fires',
+  'Conflict zones', '24/7 news', 'Satellites', 'RECON toolkit',
+]
+
+export default function WorldOpsPage() {
   return (
     <div className="biopunk" style={{
       minHeight: '100%', padding: 'clamp(24px, 4vw, 56px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
-      <Surface padding={28} style={{ maxWidth: 560, textAlign: 'center' }}>
-        <div style={{ fontSize: 34, marginBottom: 10 }}>🌐</div>
-        <Tag tone="teal" style={{ marginBottom: 14 }}>World Ops · OSIRIS</Tag>
-        <h2 style={{ margin: '0 0 10px', fontSize: 'var(--bp-text-xl)', fontWeight: 700,
-          color: 'var(--bp-ink)', letterSpacing: '-0.01em' }}>
-          World Ops isn’t connected yet
-        </h2>
-        <p style={{ margin: '0 0 20px', fontSize: 'var(--bp-text-sm)', lineHeight: 1.65,
-          color: 'var(--bp-ink-muted)' }}>
-          The live OSINT floor runs as its own deployment. Once OSIRIS is live on
-          Vercel, set <code style={{ fontFamily: 'var(--bp-font-mono)', fontSize: 12,
-          background: 'var(--bp-surface-3)', padding: '1px 6px', borderRadius: 4 }}>VITE_OSIRIS_URL</code> to
-          its URL and this floor lights up — real-time flights, maritime, quakes,
-          fires, conflict zones, and the RECON toolkit.
-        </p>
-        <a className="bp-btn bp-btn--primary" href={OSIRIS_PUBLIC} target="_blank" rel="noreferrer"
-          style={{ textDecoration: 'none' }}>
-          Open OSIRIS demo ↗
-        </a>
-      </Surface>
-    </div>
-  )
-}
-
-export default function WorldOpsPage() {
-  const [loaded, setLoaded] = useState(false)
-
-  if (!OSIRIS_URL) return <NotConfigured />
-
-  return (
-    <div style={{ position: 'absolute', inset: 0, background: '#05070a' }}>
-      {!loaded && (
-        <div style={{
-          position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center', gap: 14, zIndex: 1,
-          background: 'radial-gradient(80% 60% at 50% 40%, rgba(95,208,216,0.08), transparent 70%), #05070a',
-        }}>
-          <div className="bp-skeleton" style={{ width: 220, height: 10, borderRadius: 999 }} />
-          <div style={{ fontFamily: 'var(--bp-font-mono)', fontSize: 12, letterSpacing: '0.14em',
-            textTransform: 'uppercase', color: '#7fe4ea' }}>
-            Connecting to World Ops…
+      <Surface padding={0} style={{ maxWidth: 600, width: '100%', overflow: 'hidden' }}>
+        {/* Hero scene */}
+        <div style={{ position: 'relative', aspectRatio: '16 / 7', overflow: 'hidden' }}>
+          <img src="/sprites/lobby-og.png" alt="" draggable={false}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%',
+              objectFit: 'cover', imageRendering: 'pixelated', filter: 'brightness(0.96)' }} />
+          <div style={{ position: 'absolute', inset: 0,
+            background: 'linear-gradient(180deg, transparent 40%, rgba(8,12,14,0.55) 100%)' }} />
+          <div style={{ position: 'absolute', left: 18, bottom: 14 }}>
+            <Tag tone="teal">World Ops · OSIRIS</Tag>
           </div>
         </div>
-      )}
-      <iframe
-        src={OSIRIS_URL}
-        title="World Ops — OSIRIS intelligence dashboard"
-        onLoad={() => setLoaded(true)}
-        allow="fullscreen; geolocation; clipboard-read; clipboard-write"
-        referrerPolicy="no-referrer"
-        style={{ width: '100%', height: '100%', border: 0, display: 'block' }}
-      />
+
+        {/* Body */}
+        <div style={{ padding: 'clamp(20px, 4vw, 30px)' }}>
+          <h1 style={{ margin: '0 0 8px', fontSize: 'var(--bp-text-2xl)', fontWeight: 700,
+            letterSpacing: '-0.02em', color: 'var(--bp-ink)' }}>
+            World Ops
+          </h1>
+          <p style={{ margin: '0 0 18px', fontSize: 'var(--bp-text-base)', lineHeight: 1.6,
+            color: 'var(--bp-ink-muted)' }}>
+            The live global-intelligence floor — OSIRIS aggregates real-time flight
+            tracking, maritime, seismic, wildfire, conflict-zone and OSINT feeds into
+            one GPU-rendered map, plus a full RECON toolkit. It runs as its own app.
+          </p>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 22 }}>
+            {FEATURES.map(f => <Tag key={f} tone="sage">{f}</Tag>)}
+          </div>
+
+          <a className="bp-btn bp-btn--primary" href={OSIRIS_URL} target="_blank" rel="noreferrer"
+            style={{ textDecoration: 'none', fontSize: 'var(--bp-text-base)', padding: '12px 24px' }}>
+            Open OSIRIS ↗
+          </a>
+          <div style={{ marginTop: 10, fontFamily: 'var(--bp-font-mono)', fontSize: 'var(--bp-text-2xs)',
+            letterSpacing: '0.08em', color: 'var(--bp-ink-faint)' }}>
+            Opens {OSIRIS_URL.replace(/^https?:\/\//, '')} in a new tab
+          </div>
+        </div>
+      </Surface>
     </div>
   )
 }
