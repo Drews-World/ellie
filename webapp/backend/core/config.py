@@ -55,9 +55,15 @@ class Settings(BaseSettings):
     secret_key: str = "change-me-in-production"
     environment: str = "development"
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:5174", "https://ellie.vercel.app"]
-    # Also allow this project's Vercel preview/branch deployments
-    # (e.g. ellie-git-<branch>-…-projects.vercel.app) so previews can reach the API.
-    cors_origin_regex: str = r"https://ellie-[a-z0-9-]+-humesandrew093-9389s-projects\.vercel\.app"
+    # Also allow this project's Vercel preview/branch deployments AND any
+    # localhost port — the dev frontend doesn't always get 5173 (other
+    # projects grab it), and localhost origins are only reachable from
+    # Drew's own machine.
+    cors_origin_regex: str = (
+        r"https://ellie-[a-z0-9-]+-humesandrew093-9389s-projects\.vercel\.app"
+        r"|http://localhost:\d+"
+        r"|http://127\.0\.0\.1:\d+"
+    )
 
     class Config:
         env_file = ".env"
