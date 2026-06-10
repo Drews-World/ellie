@@ -107,7 +107,8 @@ async def ellie_chat_endpoint(
 
         response = await ellie_chat(
             [m.model_dump() for m in req.messages],
-            context
+            context,
+            user_id=user["id"],
         )
 
         # Save user's last message and ELLIE's response (best-effort)
@@ -125,6 +126,28 @@ async def ellie_chat_endpoint(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/memories")
+async def list_memories(
+    user: dict = Depends(get_current_user)
+):
+    """Everything ELLIE remembers about this user (the facts table)."""
+    from services.ellie_memory import load_memories
+    return {"memories": load_memories(user["id"])}
+
+
+@router.delete("/memories/{memory_id}")
+async def remove_memory(
+    memory_id: str,
+    user: dict = Depends(get_current_user)
+):
+    """Manually delete one of ELLIE's long-term memories."""
+    from services.ellie_memory import delete_memory
+    result = delete_memory(user["id"], memory_id)
+    if result.get("error"):
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
 
 
 @router.get("/history")

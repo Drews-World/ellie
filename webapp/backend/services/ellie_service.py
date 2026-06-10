@@ -1,10 +1,16 @@
-import asyncio
 import json
 import logging
-import os
+import re as _re
 
 from services.model_router import complete, get_model_client
 from services.ellie_tools import TOOLS, dispatch_tool
+from services.ellie_memory import (
+    MEMORY_TOOLS,
+    MEMORY_TOOL_NAMES,
+    dispatch_memory_tool,
+    format_memories,
+    load_memories,
+)
 
 logger = logging.getLogger("ellie.chat")
 
@@ -69,6 +75,15 @@ Never say "no data" or "I don't have access" without first calling a tool. For a
 broad "how are my businesses doing" question, call list_businesses, then the live
 tool for each venture, and synthesize one cohesive briefing.
 
+LONG-TERM MEMORY: You also have a persistent memory store — the facts you keep
+about Drew across every conversation.
+- When Drew states a durable preference, decision, business fact, or correction
+  worth knowing forever ("I hate X", "always do Y", "Quill's runway target is Z"),
+  call save_memory with one clean self-contained sentence. Don't ask permission.
+- When a memory in your list turns out to be wrong or outdated, call update_memory
+  (or delete_memory) using that memory's id.
+- Never store secrets (passwords, keys) or one-off conversational trivia.
+
 INTELLIGENCE DIRECTIVES:
 - Pattern Recognition: surface behavioral patterns proactively.
 - Cross-Domain Connections: connect dots across Drew's world (e.g. if a Fed move affects Quill's runway, say so).
@@ -87,63 +102,6 @@ unreachable right now and offer to try again — never make numbers up."""
 # Cap tool-calling rounds so a confused model can't loop forever.
 _MAX_TOOL_ROUNDS = 5
 
-# ── Hermes — the hosted brain ────────────────────────────────────────────────
-# When Hermes is installed on this host, route chat through it: one `hermes -z`
-# call runs the full agent (with the ellie-floors MCP tools) and returns the
-# final answer. If Hermes is absent (e.g. local dev) or errors/times out, we
-# fall back to the in-process tool-calling brain so chat never goes dark.
-# Master switch. Hermes is fully installed + tooled on the host, but one-shot
-# mode intermittently returns a narration stub instead of completing tool calls,
-# which would degrade the chat. Keep it OFF until that's resolved; the proven
-# in-process tool brain serves chat meanwhile. Flip HERMES_ENABLED=1 to promote
-# Hermes to the primary brain.
-HERMES_ENABLED = os.environ.get("HERMES_ENABLED", "").strip().lower() in ("1", "true", "yes", "on")
-HERMES_BIN = os.environ.get("HERMES_BIN", "/home/ellie/hermes/.venv/bin/hermes")
-# Sonnet is reliable at tool-calling; gpt-4o-mini drops the MCP tools.
-HERMES_MODEL = os.environ.get("HERMES_MODEL", "anthropic/claude-sonnet-4.5")
-HERMES_CWD = os.environ.get("HERMES_CWD", "/home/ellie/hermes")
-# One-shot only loads the "cli" profile by default; name the MCP floors toolset
-# explicitly so Hermes can actually see sales / trading / business tools.
-HERMES_TOOLSETS = os.environ.get("HERMES_TOOLSETS", "ellie-floors")
-HERMES_TIMEOUT = float(os.environ.get("HERMES_TIMEOUT", "180"))
-
-
-# Lean persona for Hermes. Hermes already has its own agent loop + system prompt;
-# over-steering it (e.g. "you MUST call the tool") makes it fake-template answers
-# with [placeholder] brackets instead of either chatting or actually calling tools.
-# Keep it minimal and let its native tool-use decide.
-HERMES_PERSONA = (
-    "You are ELLIE — Drew's executive AI and the brain of his multi-venture "
-    "operation. Crisp, confident, analytical, a little wry. Never pad. Keep "
-    "replies under 400 words and sign off '— ELLIE'.\n"
-    "You have live ellie-floors tools for Drew's Etsy POD business (designs, "
-    "pipeline, realized sales, spend), the autonomous trading fund (account, "
-    "positions, P&L), and his business registry. Rules:\n"
-    "- For greetings or chit-chat, just reply naturally — do NOT dump a business briefing.\n"
-    "- When he asks for any business/sales/design/pipeline/spend/trading figure, "
-    "call the relevant tool and answer with the real result.\n"
-    "- NEVER write placeholder brackets like [balance] or [sales]. If you'd need a "
-    "number, call the tool to get it. Never invent figures."
-)
-
-
-def _build_hermes_prompt(messages: list, context: dict | None = None) -> str:
-    """Lean persona + context + conversation → one-shot prompt for Hermes."""
-    lines = [HERMES_PERSONA]
-    if context:
-        lines.append(f"\nContext about Drew: {context}")
-    lines.append("\n--- Conversation so far ---")
-    for m in messages:
-        role = str(m.get("role", "user")).upper()
-        lines.append(f"{role}: {m.get('content', '')}")
-    lines.append("\nReply as ELLIE to the latest USER message.")
-    return "\n".join(lines)
-
-
-import re as _re
-
-HERMES_RETRIES = int(os.environ.get("HERMES_RETRIES", "3"))
-
 # A "stub" is a non-answer we should retry instead of serving: the model
 # narrating intent ("I'll call the tool…") and stopping, a fake [placeholder]
 # template instead of real tool data, or essentially-empty (just the signoff).
@@ -155,14 +113,6 @@ _STUB_RE = _re.compile(
 # Bracketed placeholders the model writes when it templates instead of calling tools.
 _PLACEHOLDER_RE = _re.compile(r"\[[A-Za-z][^\]]{2,40}\]")
 _SIGNOFF_RE = _re.compile(r"[—\-–]\s*ELLIE\s*$")
-# Hermes's own failure sentinels (printed as the "answer" with rc=0) — e.g.
-# "⚠️ No reply: the model returned empty content after retries…". Treat as a
-# failed run so we retry, then fall back to the in-process brain.
-_HERMES_FAIL_RE = _re.compile(
-    r"no reply|returned empty content|after retries|switch model/provider|"
-    r"try `?continue`?|no final response",
-    _re.IGNORECASE,
-)
 
 
 def _looks_like_stub(text: str) -> bool:
@@ -170,9 +120,6 @@ def _looks_like_stub(text: str) -> bool:
     # Essentially-empty: nothing left once the signoff is stripped.
     body = _SIGNOFF_RE.sub("", t).strip()
     if len(body) < 12:
-        return True
-    # Hermes's own "empty content / no reply" failure message.
-    if _HERMES_FAIL_RE.search(t):
         return True
     # Fake template: bracketed placeholders instead of real tool data.
     if _PLACEHOLDER_RE.search(t):
@@ -183,61 +130,26 @@ def _looks_like_stub(text: str) -> bool:
     return False
 
 
-def _run_hermes_blocking(prompt: str) -> str | None:
-    """Blocking Hermes one-shot with retry-on-stub. Runs in a thread (keeps
-    asyncio's child-watcher out of Hermes's own MCP subprocess spawning) and
-    re-runs when the model returns a narration stub instead of a real answer.
-    Returns None after exhausting retries so the caller falls back."""
-    import subprocess
-    for attempt in range(1, HERMES_RETRIES + 1):
-        try:
-            r = subprocess.run(
-                [HERMES_BIN, "-z", prompt,
-                 "--provider", "openrouter", "-m", HERMES_MODEL, "-t", HERMES_TOOLSETS],
-                cwd=HERMES_CWD, capture_output=True, text=True,
-                timeout=HERMES_TIMEOUT, stdin=subprocess.DEVNULL,
-            )
-            out = (r.stdout or "").strip()
-            if r.returncode == 0 and out:
-                if not _looks_like_stub(out):
-                    return out
-                logger.info("hermes stub on attempt %d/%d, retrying", attempt, HERMES_RETRIES)
-                continue
-            logger.warning("hermes oneshot rc=%s err=%s", r.returncode, (r.stderr or "")[:300])
-        except subprocess.TimeoutExpired:
-            logger.warning("hermes oneshot timed out after %ss (attempt %d)", HERMES_TIMEOUT, attempt)
-        except Exception as e:  # noqa: BLE001
-            logger.warning("hermes oneshot failed (attempt %d): %s", attempt, e)
-    return None
-
-
-async def _hermes_oneshot(prompt: str) -> str | None:
-    """Run Hermes in one-shot mode (off-thread); return its final answer or None."""
-    if not os.path.exists(HERMES_BIN):
-        return None
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, _run_hermes_blocking, prompt)
-
-
-async def ellie_chat(messages: list, context: dict = {}) -> str:
+async def ellie_chat(messages: list, context: dict = {}, user_id: str | None = None) -> str:
     # Interactive conversation with live tool access → "the cohesive brain".
     system = ELLIE_SYSTEM
     if context:
         system += f"\n\nCurrent context about Drew: {context}"
     system += CHAT_DIRECTIVES
 
-    # Primary brain: Hermes (hosted agent with floor tools via MCP) — opt-in.
-    if HERMES_ENABLED:
-        answer = await _hermes_oneshot(_build_hermes_prompt(messages, context))
-        if answer:
-            return answer
-        logger.info("ellie_chat: Hermes unavailable, using in-process tool brain")
+    # Long-term memory: everything ELLIE has saved about Drew, every conversation.
+    memories = load_memories(user_id) if user_id else []
+    if memories:
+        system += (
+            "\n\nWHAT YOU CURRENTLY REMEMBER ABOUT DREW (long-term memory):\n"
+            + format_memories(memories)
+        )
 
     formatted = [{"role": m["role"], "content": m["content"]} for m in messages]
     convo = [{"role": "system", "content": system}, *formatted]
 
     try:
-        return await _chat_with_tools(convo)
+        return await _chat_with_tools(convo, user_id)
     except Exception as e:
         err = str(e)
         if "quota" in err.lower() or "429" in err:
@@ -262,16 +174,19 @@ async def ellie_chat(messages: list, context: dict = {}) -> str:
 # Honest message when the model keeps returning empty (vs. a blank "— ELLIE").
 _EMPTY_REPLY = "I hit a snag generating that one — mind asking again? — ELLIE"
 
+# Floors tools + memory tools = the full tool surface of the brain.
+_ALL_TOOLS = TOOLS + MEMORY_TOOLS
+
 
 def _create_msg(client, model, convo, with_tools: bool):
     """One completion, retrying when the model returns an unusable message —
     no tool calls AND content that's empty or just a stub (e.g. only the
-    '— ELLIE' signoff). OpenRouter/Llama intermittently produce these."""
+    '— ELLIE' signoff)."""
     msg = None
     for _ in range(4):
         kw = {"model": model, "messages": convo, "max_tokens": 1000}
         if with_tools:
-            kw["tools"] = TOOLS
+            kw["tools"] = _ALL_TOOLS
             kw["tool_choice"] = "auto"
         msg = client.chat.completions.create(**kw).choices[0].message
         if getattr(msg, "tool_calls", None):
@@ -291,14 +206,14 @@ def _final_text(msg) -> str:
     return content
 
 
-async def _chat_with_tools(convo: list) -> str:
-    """Run the model with function-calling, executing tools until it answers.
+async def _chat_with_tools(convo: list, user_id: str | None = None) -> str:
+    """Run the brain model with function-calling, executing tools until it answers.
 
-    Uses the `fast` tier (Llama 3.3 70B) — confirmed tool-capable on the current
-    OpenRouter account — for the orchestration. `complete()` only returns text
-    and can't surface tool_calls, so we drive the client directly here.
+    Uses the `brain` tier (Claude Sonnet 4.6 via OpenRouter) — strong, reliable
+    tool-calling for the floors tools and memory curation. `complete()` only
+    returns text and can't surface tool_calls, so we drive the client directly.
     """
-    client, model = get_model_client("fast")
+    client, model = get_model_client("brain")
 
     for _ in range(_MAX_TOOL_ROUNDS):
         msg = _create_msg(client, model, convo, with_tools=True)
@@ -328,7 +243,10 @@ async def _chat_with_tools(convo: list) -> str:
             except (ValueError, TypeError):
                 args = {}
             logger.info("ellie_chat: tool call %s(%s)", name, args)
-            result = await dispatch_tool(name, args)
+            if name in MEMORY_TOOL_NAMES:
+                result = await dispatch_memory_tool(name, args, user_id)
+            else:
+                result = await dispatch_tool(name, args)
             convo.append({
                 "role": "tool",
                 "tool_call_id": tc.id,

@@ -2623,6 +2623,7 @@ async def startup():
     asyncio.create_task(_monitor_scheduler())
     asyncio.create_task(_scout_scheduler())
     asyncio.create_task(_fund_scheduler())
+    asyncio.create_task(_strategy_scheduler())
     token = os.environ.get("DISCORD_BOT_TOKEN", "").strip()
     if token:
         t = threading.Thread(target=_run_discord_bot, daemon=True)
@@ -3443,3 +3444,260 @@ async def get_portfolio_history():
         return json.loads(PORTFOLIO_HISTORY_FILE.read_text())
     except Exception:
         return []
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Strategy Engine — the deterministic layer under the LLM crew
+# ══════════════════════════════════════════════════════════════════════════════
+# Pure-code strategies (mean reversion / momentum breakout / trend following)
+# with ATR sizing, hard stops, and a correlation filter. Paper-only, starts
+# paused. The LLM crew reviews this engine's trade log weekly (oversight) but
+# never makes per-trade decisions here. See strategies/ for the implementation.
+
+from strategies import backtest as strategy_backtest
+from strategies import data as strategy_data
+from strategies.engine import engine as strategy_engine
+
+_engine_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="engine")
+_backtest_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="backtest")
+
+
+class EngineBacktestRequest(BaseModel):
+    strategies: Optional[List[str]] = None   # default: all configured strategies
+    years: int = 3
+    initial_equity: float = 100_000.0
+    slippage_bps: float = 2.0
+
+
+@app.get("/engine")
+async def engine_status():
+    """Engine state: active flag, config, open positions, recent trades, log."""
+    return strategy_engine.status()
+
+
+@app.post("/engine/start")
+async def engine_start():
+    result = strategy_engine.start()
+    if result.get("error"):
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+
+@app.post("/engine/pause")
+async def engine_pause():
+    return strategy_engine.pause()
+
+
+@app.post("/engine/config")
+async def engine_config(patch: dict):
+    """Merge config changes (engine-level keys and/or per-strategy params)."""
+    return {"config": strategy_engine.update_config(patch)}
+
+
+@app.post("/engine/tick")
+async def engine_tick():
+    """Run one tick now (debug/manual). Normally the scheduler does this."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(_engine_executor, strategy_engine.tick)
+
+
+@app.get("/engine/trades")
+async def engine_trades():
+    state = strategy_engine.get_state()
+    return {"trades": state.get("trades", []), "positions": state.get("positions", {})}
+
+
+@app.post("/engine/backtest")
+async def engine_backtest(req: EngineBacktestRequest):
+    """Kick off a backtest of the engine's strategies over historical bars."""
+    store = strategy_backtest.get_results()
+    if store.get("running"):
+        raise HTTPException(status_code=409, detail="a backtest is already running")
+    years = max(1, min(int(req.years), 5))
+    cfg = strategy_engine.get_state()["config"]
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(
+        _backtest_executor,
+        lambda: strategy_backtest.run_backtest(
+            cfg, req.strategies, years, req.initial_equity, req.slippage_bps
+        ),
+    )
+    return {"ok": True, "started": True, "years": years}
+
+
+@app.get("/engine/backtest")
+async def engine_backtest_results():
+    """Backtest status + stored results (newest first)."""
+    return strategy_backtest.get_results()
+
+
+@app.get("/engine/review")
+async def engine_review():
+    state = strategy_engine.get_state()
+    return {
+        "review": state.get("review"),
+        "last_review": state.get("last_review"),
+        "next_review": state.get("next_review"),
+    }
+
+
+@app.post("/engine/review/run")
+async def engine_review_run():
+    """Trigger the weekly LLM oversight review now."""
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(_engine_executor, _run_strategy_review)
+    return {"ok": True, "started": True}
+
+
+def _engine_trade_summary(trades: list) -> dict:
+    """Per-strategy aggregates the oversight LLM can reason over."""
+    per = {}
+    for t in trades:
+        s = per.setdefault(t.get("strategy", "?"), {"trades": 0, "wins": 0, "pnl": 0.0, "stops_hit": 0})
+        s["trades"] += 1
+        if (t.get("pnl") or 0) > 0:
+            s["wins"] += 1
+        s["pnl"] = round(s["pnl"] + (t.get("pnl") or 0), 2)
+        if t.get("reason") == "hard_stop":
+            s["stops_hit"] += 1
+    for s in per.values():
+        s["win_rate_pct"] = round(s["wins"] / s["trades"] * 100, 1) if s["trades"] else None
+    return per
+
+
+def _engine_regime_snapshot(symbols: list) -> dict:
+    """Cheap volatility/trend context per symbol so the reviewer can spot
+    regime changes (e.g. 'vol doubled — mean reversion is getting chopped')."""
+    import pandas as pd
+    regime = {}
+    for sym in symbols:
+        try:
+            df = strategy_data.fetch_bars(sym, "1Hour", days=30)
+            if df.empty or len(df) < 100:
+                continue
+            rets = df["close"].pct_change().dropna()
+            cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=7)
+            recent = rets[rets.index >= cutoff]
+            prior = rets[rets.index < cutoff]
+            regime[sym] = {
+                "vol_last_7d": round(float(recent.std()) * 100, 3) if len(recent) > 5 else None,
+                "vol_prior_23d": round(float(prior.std()) * 100, 3) if len(prior) > 5 else None,
+                "trend_30d_pct": round((float(df["close"].iloc[-1]) / float(df["close"].iloc[0]) - 1) * 100, 2),
+            }
+        except Exception:
+            continue
+    return regime
+
+
+def _run_strategy_review():
+    """Weekly oversight: the LLM crew reads the engine's trade log + regime
+    data and recommends keep/adjust/pause per strategy. ADVISORY ONLY — the
+    engine never auto-applies changes; Drew does, from the UI."""
+    try:
+        state = strategy_engine.get_state()
+        cfg = state.get("config", {})
+        trades = state.get("trades", [])
+        week_ago = (datetime.utcnow() - timedelta(days=7)).isoformat()
+        recent = [t for t in trades if (t.get("exit_time") or "") >= week_ago]
+        symbols = sorted({s for p in cfg.get("strategies", {}).values() for s in p.get("symbols", [])})
+
+        context = {
+            "engine_active": state.get("active"),
+            "config": cfg,
+            "open_positions": state.get("positions", {}),
+            "last_7_days_per_strategy": _engine_trade_summary(recent),
+            "all_time_per_strategy": _engine_trade_summary(trades),
+            "recent_trades": trades[:15],
+            "market_regime": _engine_regime_snapshot(symbols),
+        }
+
+        fund_cfg = _load_fund().get("config", {})
+        provider = fund_cfg.get("llm_provider", "google")
+        model = fund_cfg.get("deep_think_llm", "gemini-2.5-pro")
+
+        from tradingagents.llm_clients.factory import create_llm_client
+        from langchain_core.messages import HumanMessage, SystemMessage
+
+        system = (
+            "You are the risk-oversight desk for a deterministic paper-trading engine. "
+            "The engine trades fixed rules (mean reversion on index ETFs, momentum breakout "
+            "on BTC, trend following on commodity ETFs) with ATR sizing and hard stops. "
+            "You do NOT pick trades. You review the engine's results and the market regime, "
+            "then recommend — per strategy — whether to KEEP it running as-is, ADJUST "
+            "parameters (say exactly which and to what), or PAUSE it. Ground every verdict "
+            "in the data provided; small sample sizes deserve explicit caution, not "
+            "confident conclusions. This is research, not financial advice."
+        )
+        question = (
+            "Here is the engine's current state and results:\n\n"
+            f"{json.dumps(context, indent=2, default=str)[:12000]}\n\n"
+            "Respond with ONLY a JSON object shaped exactly like:\n"
+            '{"strategies": {"<name>": {"verdict": "KEEP|ADJUST|PAUSE", '
+            '"reasoning": "...", "suggested_changes": {}}}, "overall": "..."}'
+        )
+
+        client = create_llm_client(provider, model)
+        llm = client.get_llm()
+        response = llm.invoke([SystemMessage(content=system), HumanMessage(content=question)])
+        raw = getattr(response, "content", str(response))
+
+        # Parse leniently — strip code fences, then try JSON.
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip(), flags=re.MULTILINE)
+        try:
+            parsed = json.loads(cleaned)
+        except Exception:
+            parsed = {"overall": raw[:2000], "strategies": {}}
+
+        review = {
+            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "provider": provider,
+            "model": model,
+            "verdicts": parsed.get("strategies", {}),
+            "overall": parsed.get("overall", ""),
+            "data_window": {"recent_trades": len(recent), "all_time_trades": len(trades)},
+        }
+        strategy_engine.set_review(review)
+        _app_logger.info("[engine] weekly review generated")
+
+        fields = []
+        for name, v in (review["verdicts"] or {}).items():
+            fields.append({
+                "name": f"{name} — {v.get('verdict', '?')}",
+                "value": str(v.get("reasoning", ""))[:1000] or "—",
+                "inline": False,
+            })
+        _send_discord_webhook(
+            title="🧭 ELLIE — Weekly Strategy Review",
+            description=str(review.get("overall", ""))[:1500] or "Review complete.",
+            fields=fields[:8],
+            footer=f"strategy engine · {provider}/{model} · advisory only",
+        )
+    except Exception as exc:
+        _app_logger.error(f"[engine] weekly review failed — {exc}")
+
+
+async def _strategy_scheduler():
+    """Every 2 min: tick the engine (new-bar evaluation + stop sweep). Weekly:
+    run the LLM oversight review once the engine has any history."""
+    loop = asyncio.get_event_loop()
+    while True:
+        await asyncio.sleep(120)
+        try:
+            await loop.run_in_executor(_engine_executor, strategy_engine.tick)
+        except Exception:
+            pass
+        try:
+            state = strategy_engine.get_state()
+            if not (state.get("active") or state.get("trades")):
+                continue
+            now = datetime.utcnow()
+            next_review = state.get("next_review")
+            if not next_review:
+                strategy_engine.save_fields(
+                    next_review=(now + timedelta(days=7)).isoformat() + "Z")
+            elif datetime.fromisoformat(next_review.replace("Z", "")) <= now:
+                strategy_engine.save_fields(
+                    next_review=(now + timedelta(days=7)).isoformat() + "Z")
+                await loop.run_in_executor(_engine_executor, _run_strategy_review)
+        except Exception:
+            pass

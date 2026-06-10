@@ -18,7 +18,8 @@ class Settings(BaseSettings):
 
     # Model routing per task tier (OpenRouter model ids).
     # See services/model_router.py + docs/ELLIE_REFACTOR_PLAN.md.
-    model_complex: str = "anthropic/claude-sonnet-4.5"        # high-stakes reasoning / code
+    model_brain: str = "anthropic/claude-sonnet-4.6"          # ELLIE chat agent loop (tools + memory)
+    model_complex: str = "anthropic/claude-sonnet-4.6"        # high-stakes reasoning / code
     model_fast: str = "meta-llama/llama-3.3-70b-instruct"     # conversational / quick
     model_bulk: str = "qwen/qwen-2.5-72b-instruct"            # routine summarize / brief
     model_trivial: str = "meta-llama/llama-3.1-8b-instruct"   # tagging / classification

@@ -12,6 +12,7 @@ import PortfolioView from './views/PortfolioView'
 import SettingsView from './views/SettingsView'
 import BrokerageView from './views/BrokerageView'
 import FundView from './views/FundView'
+import EngineView from './views/EngineView'
 import OperationsView from './views/OperationsView'
 import { tfetch } from './lib/tapi'
 
@@ -45,6 +46,7 @@ export default function TradingDashboard() {
             {activeView === 'portfolio' && <PortfolioView />}
             {activeView === 'operations' && <OperationsView />}
             {activeView === 'fund' && <FundView />}
+            {activeView === 'engine' && <EngineView />}
             {activeView === 'brokerage' && <BrokerageView />}
             {activeView === 'settings' && <SettingsView />}
           </main>

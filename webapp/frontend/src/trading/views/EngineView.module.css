@@ -1,0 +1,380 @@
+/* ── Page layout ── */
+.page {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pageTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.paperBadge {
+  font-size: 10px;
+  font-weight: 700;
+  background: #fde68a;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+  border-radius: 4px;
+  padding: 2px 7px;
+  letter-spacing: 0.05em;
+}
+
+.statusPill {
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 3px 10px;
+  letter-spacing: 0.04em;
+}
+.pillOn  { background: var(--green-light); color: var(--green); border: 1px solid var(--green-border); }
+.pillOff { background: var(--yellow-light); color: var(--yellow); border: 1px solid var(--yellow-border); }
+
+.headerActions { display: flex; align-items: center; gap: 10px; }
+
+.refreshBtn {
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.refreshBtn:hover { background: var(--bg-card); }
+
+.primaryBtn {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-on-accent, #fff);
+  background: var(--indigo);
+  border: 1px solid var(--indigo);
+  border-radius: var(--radius-sm);
+  padding: 5px 14px;
+  cursor: pointer;
+}
+.primaryBtn:disabled { opacity: 0.5; cursor: default; }
+
+.dangerBtn {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--red);
+  background: var(--red-light);
+  border: 1px solid var(--red-border);
+  border-radius: var(--radius-sm);
+  padding: 5px 14px;
+  cursor: pointer;
+}
+.dangerBtn:disabled { opacity: 0.5; cursor: default; }
+
+/* ── Summary cards ── */
+.summaryRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.summaryCard {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+}
+
+/* ── Panels ── */
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.panelTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.panelSub {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.metaRow { font-size: 11px; color: var(--text-dim); }
+
+.notice {
+  font-size: 12px;
+  color: var(--indigo);
+  background: var(--indigo-light);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+}
+
+.errorNotice {
+  font-size: 12px;
+  color: var(--red);
+  background: var(--red-light);
+  border: 1px solid var(--red-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+}
+
+.empty {
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: 10px 0;
+}
+
+/* ── Stats ── */
+.statGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+.statCell {
+  background: var(--bg-card);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+
+.statLabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  margin-bottom: 3px;
+}
+
+.statValue { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+.statValueSm { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+
+.pos { color: var(--green); }
+.neg { color: var(--red); }
+
+/* ── Risk + strategy config ── */
+.riskRow {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.paramField {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+}
+
+.paramField input {
+  width: 90px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 13px;
+  padding: 5px 8px;
+}
+
+.stratRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.stratCard {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.stratDisabled { opacity: 0.55; }
+
+.stratHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.stratName { font-size: 13px; font-weight: 700; color: var(--text-primary); }
+.stratSymbols { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.stratStats { font-size: 12px; color: var(--text-secondary); }
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.paramGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.saveBtn {
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--indigo);
+  background: var(--indigo-light);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+/* ── Backtest ── */
+.backtestControls { display: flex; align-items: center; gap: 8px; }
+
+.select {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.tab {
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+.tabActive {
+  color: var(--indigo);
+  background: var(--indigo-light);
+  border-color: var(--indigo);
+  font-weight: 600;
+}
+
+/* ── Oversight review ── */
+.reviewOverall {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  background: var(--bg-card);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+
+.verdictList { display: flex; flex-direction: column; gap: 10px; }
+
+.verdictRow { display: flex; gap: 10px; align-items: flex-start; }
+
+.verdictBadge {
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 3px 8px;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.verdictKeep   { background: var(--green-light); color: var(--green); border: 1px solid var(--green-border); }
+.verdictAdjust { background: var(--yellow-light); color: var(--yellow); border: 1px solid var(--yellow-border); }
+.verdictPause  { background: var(--red-light); color: var(--red); border: 1px solid var(--red-border); }
+
+.verdictName { font-size: 12px; font-weight: 700; color: var(--text-primary); }
+.verdictReason { font-size: 12px; color: var(--text-secondary); line-height: 1.45; margin-top: 2px; }
+.verdictChanges { font-size: 11px; color: var(--indigo); margin-top: 3px; font-family: ui-monospace, monospace; }
+
+/* ── Tables ── */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.table th {
+  text-align: left;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  font-weight: 600;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--border-dim);
+  color: var(--text-secondary);
+}
+
+.sym { font-weight: 700; color: var(--text-primary); }
+
+/* ── Log ── */
+.log {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.logLine {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  line-height: 1.5;
+}
+
+.logTs { color: var(--text-dim); margin-right: 6px; }
+
+@media (max-width: 700px) {
+  .page { padding: 12px; }
+  .summaryRow { grid-template-columns: repeat(2, 1fr); }
+}

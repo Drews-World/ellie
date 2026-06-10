@@ -1,21 +1,24 @@
 """
 ELLIE Floors — MCP bridge
 =========================
-Exposes ELLIE's existing FastAPI domain routers to Hermes (her brain) as MCP tools.
+Exposes ELLIE's existing FastAPI domain routers to any MCP client as tools.
+(ELLIE's chat brain now runs in-process — services/ellie_service.py — so this
+bridge is for external agents: Claude Code, desktop MCP clients, etc.)
 
-This is the "clean seam" from docs/ELLIE_REFACTOR_PLAN.md: Hermes calls these tools,
-each tool is a thin HTTP call to the running ELLIE backend (default :8002), and the
-backend stays the system-of-record (it proxies to ellietrading and elliebusiness).
+This is the "clean seam" from docs/ELLIE_REFACTOR_PLAN.md: the MCP client calls
+these tools, each tool is a thin HTTP call to the running ELLIE backend (default
+:8002), and the backend stays the system-of-record (it proxies to ellietrading
+and elliebusiness).
 
-  Hermes (brain)  ──MCP──►  this server  ──HTTP──►  ELLIE backend :8002
-                                                      ├── /trading/*  → ellietrading
-                                                      └── /business/* → elliebusiness
+  MCP client  ──MCP──►  this server  ──HTTP──►  ELLIE backend :8002
+                                                  ├── /trading/*  → ellietrading
+                                                  └── /business/* → elliebusiness
 
-Run (Hermes launches it over stdio):
+Run (the MCP client launches it over stdio):
     python webapp/backend/mcp_bridge/floors_server.py
 
-Requires only `mcp` + `httpx` (both present in the Hermes venv). It does NOT import
-the backend package, so it can run under any interpreter that has those two deps.
+Requires only `mcp` + `httpx`. It does NOT import the backend package, so it can
+run under any interpreter that has those two deps.
 
 Safety note: high-stakes / irreversible actions (placing trades, launching the fund,
 publishing) are deliberately NOT exposed here yet. Per the plan, those stay behind

@@ -42,6 +42,7 @@ logger = logging.getLogger("ellie.model_router")
 
 # ── Tier → settings field holding its OpenRouter model id ──
 _TIER_FIELDS = {
+    "brain": "model_brain",
     "complex": "model_complex",
     "fast": "model_fast",
     "bulk": "model_bulk",
@@ -62,8 +63,9 @@ TASK_ROUTES = {
     "trade_proposal": "complex",
     "deep_analysis": "complex",
     "plan": "complex",
+    # brain — ELLIE's chat agent loop: tool calling + memory curation
+    "chat": "brain",
     # fast — interactive, latency-sensitive
-    "chat": "fast",
     "quick_analysis": "fast",
     "reply": "fast",
     # bulk — routine high-volume synthesis
@@ -88,6 +90,7 @@ TASK_ROUTES = {
 # same provider, cheapest-capable first. Every chain is finite and bottoms out;
 # `complete` then tries the Gemini fallback as a final safety net.
 FALLBACK_CHAIN = {
+    "brain": ["brain", "complex", "fast", "bulk"],
     "complex": ["complex", "fast", "bulk"],
     "fast": ["fast", "bulk", "trivial"],
     "bulk": ["bulk", "trivial"],
