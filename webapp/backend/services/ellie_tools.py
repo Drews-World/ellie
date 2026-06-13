@@ -1,15 +1,22 @@
 """
 ELLIE chat tools — the "cohesive brain" data layer.
 
-Read-only functions that let the ELLIE web chat query any floor of the Hub on
-demand (Etsy POD business, the agent pipeline, realized sales, designs, the
+Functions that let the ELLIE web chat query — and act on — any floor of the Hub
+on demand (Etsy POD business, the agent pipeline, realized sales, designs, the
 trading fund, Drew's business registry) instead of stuffing every fact into the
 system prompt. Each tool returns a compact dict the model can reason over.
 
+Most tools are read-only. The trading floor additionally exposes a small set of
+WRITE tools (place_trade, launch_fund_cycle, trigger_fund_review, scan_catalysts,
+set_fund_paused) that mutate the fund's paper account so ELLIE can execute when
+Drew tells her to. The read tools are named get_* / list_*; the write tools carry
+an action verb.
+
 Design notes
 ------------
-- Every tool is read-only and best-effort: it returns an {"error": ...} dict on
-  failure rather than raising, so one dead floor never kills the whole chat.
+- Every tool is best-effort: it returns an {"error": ...} (reads) or
+  {"ok": False, "error": ...} (writes) dict on failure rather than raising, so one
+  dead floor or a rejected order never kills the whole chat.
 - Business-floor calls reuse routers.business._get (single source of truth for
   the elliebusiness base URL + auth header). Trading calls reuse the shared
   async `trading` client.
@@ -45,9 +52,14 @@ BUSINESS_REGISTRY = [
         "id": "ellie_trading",
         "name": "ELLIE Trading (autonomous fund)",
         "type": "Algorithmic investing",
-        "summary": "Autonomous trading fund on Alpaca — discovers, analyzes, and trades "
-                   "equities. Use get_trading_status for live account, positions, and P&L.",
-        "live_tools": ["get_trading_status"],
+        "summary": "Autonomous trading fund on Alpaca (paper) — discovers, analyzes, and "
+                   "trades equities. Use get_trading_status for live account, positions, and "
+                   "P&L. ELLIE can also ACT on it: place_trade to buy/sell a ticker, "
+                   "launch_fund_cycle / trigger_fund_review / scan_catalysts to drive the "
+                   "agents, and set_fund_paused to pause/resume.",
+        "live_tools": ["get_trading_status", "place_trade", "get_recent_orders",
+                       "launch_fund_cycle", "trigger_fund_review", "scan_catalysts",
+                       "set_fund_paused"],
     },
     {
         "id": "quill",
@@ -154,6 +166,82 @@ async def get_trading_status() -> dict:
             "paused": fund.get("paused"),
         },
     }
+
+
+# ── Write / execution tools (trading floor) ──────────────────────────────────
+# Unlike the read tools above, these MUTATE the fund: they place orders and drive
+# the autonomous agents. The fund runs on a paper Alpaca account. Each one is
+# still best-effort — it returns {"ok": False, "error": ...} instead of raising,
+# so a failed trade reports back to Drew rather than killing the chat.
+
+async def place_trade(
+    ticker: str,
+    side: str = "buy",
+    qty: float | None = None,
+    notional: float | None = None,
+) -> dict:
+    """Place a market order on the fund's account. Provide qty (shares) OR notional ($)."""
+    if qty is None and notional is None:
+        return {"ok": False, "error": "specify qty (shares) or notional (dollar amount)"}
+    side = (side or "buy").lower()
+    if side not in ("buy", "sell"):
+        return {"ok": False, "error": f"side must be 'buy' or 'sell', got {side!r}"}
+    try:
+        order = await trading.place_order(ticker, side, qty=qty, notional=notional)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("place_trade %s %s failed: %s", side, ticker, e)
+        return {"ok": False, "error": str(e)}
+    logger.info("ellie placed %s order: %s qty=%s notional=%s", side, ticker, qty, notional)
+    return {"ok": True, "order": order}
+
+
+async def get_recent_orders() -> dict:
+    """Recent orders on the fund's account — use to confirm a trade filled."""
+    try:
+        orders = await trading.get_orders()
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)}
+    return {"ok": True, "orders": orders[:25] if isinstance(orders, list) else orders}
+
+
+async def launch_fund_cycle() -> dict:
+    """Kick the autonomous fund: runs the discover → analyze → buy cycle."""
+    try:
+        res = await trading.launch_fund()
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)}
+    logger.info("ellie launched fund cycle")
+    return {"ok": True, "result": res}
+
+
+async def trigger_fund_review() -> dict:
+    """Manually trigger the fund's portfolio review (re-evaluates holdings + buys)."""
+    try:
+        res = await trading.trigger_fund_review()
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)}
+    logger.info("ellie triggered fund review")
+    return {"ok": True, "result": res}
+
+
+async def scan_catalysts() -> dict:
+    """Run a catalyst scan (IPOs, earnings, tracked events) to feed the fund new ideas."""
+    try:
+        res = await trading.trigger_catalyst_scan()
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)}
+    logger.info("ellie triggered catalyst scan")
+    return {"ok": True, "result": res}
+
+
+async def set_fund_paused(paused: bool) -> dict:
+    """Pause (True) or resume (False) the autonomous fund."""
+    try:
+        res = await (trading.pause_fund() if paused else trading.resume_fund())
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)}
+    logger.info("ellie set fund paused=%s", paused)
+    return {"ok": True, "result": res}
 
 
 async def _safe(fn, *args):
@@ -263,6 +351,83 @@ TOOLS = [
             "parameters": {"type": "object", "properties": {}},
         },
     },
+    # ── Write / execution tools — these actually trade and drive the fund ──────
+    {
+        "type": "function",
+        "function": {
+            "name": "place_trade",
+            "description": "Place a market BUY or SELL order on the fund's (paper) account. "
+                           "Use this when Drew tells you to buy or sell a specific ticker now "
+                           "(e.g. 'get some SPCX', 'sell half my NVDA'). Provide qty (shares) "
+                           "OR notional (dollar amount), not both. Check get_trading_status "
+                           "first for available cash/buying power, then size the order sensibly "
+                           "if Drew didn't specify. Confirm the fill with get_recent_orders.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ticker": {"type": "string", "description": "Ticker symbol, e.g. SPCX."},
+                    "side": {"type": "string", "enum": ["buy", "sell"], "description": "buy or sell (default buy)."},
+                    "qty": {"type": "number", "description": "Number of shares (omit if using notional)."},
+                    "notional": {"type": "number", "description": "Dollar amount to trade (omit if using qty)."},
+                },
+                "required": ["ticker"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_recent_orders",
+            "description": "List recent orders on the fund's account, to confirm whether a "
+                           "trade you placed filled and at what price. Use right after place_trade.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "launch_fund_cycle",
+            "description": "Kick the autonomous fund into action — runs the full discover → "
+                           "analyze → buy cycle so the agents go find and act on opportunities. "
+                           "Use when Drew says 'get the agents working' / 'put the fund to work'.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "trigger_fund_review",
+            "description": "Trigger the fund's portfolio review cycle now — it re-evaluates "
+                           "current holdings and makes buy/sell/hold decisions. Use for "
+                           "'review the portfolio' / 'rebalance now'.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "scan_catalysts",
+            "description": "Run a catalyst scan for upcoming IPOs, earnings, and tracked market "
+                           "events to feed the fund fresh ideas. Use when Drew flags something "
+                           "like a new IPO he wants the fund aware of.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_fund_paused",
+            "description": "Pause or resume the autonomous fund. Pause to stop all scheduled "
+                           "reviews and auto-buys; resume to turn it back on.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "paused": {"type": "boolean", "description": "True to pause, False to resume."},
+                },
+                "required": ["paused"],
+            },
+        },
+    },
 ]
 
 TOOL_DISPATCH = {
@@ -275,6 +440,13 @@ TOOL_DISPATCH = {
     "get_treasury_spend": get_treasury_spend,
     "get_promotion_status": get_promotion_status,
     "get_trading_status": get_trading_status,
+    # Write / execution
+    "place_trade": place_trade,
+    "get_recent_orders": get_recent_orders,
+    "launch_fund_cycle": launch_fund_cycle,
+    "trigger_fund_review": trigger_fund_review,
+    "scan_catalysts": scan_catalysts,
+    "set_fund_paused": set_fund_paused,
 }
 
 
